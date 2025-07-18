@@ -37,8 +37,7 @@ const getCUsForTx = async (
       retryNum + 1,
     );
   }
-  const CUs = simulation.value.unitsConsumed ?? 1.4e6;
-  return CUs;
+  return simulation.value.unitsConsumed ?? 1.4e6;
 };
 
 export const createVersionedTransaction = async (
@@ -107,15 +106,15 @@ export const sendTransactionWithRetry = async (
   console.log(Buffer.from(vt.transaction.serialize()).toString("base64"));
 
   try {
-    const hash = await Promise.race([
+    return await Promise.race([
       (async () => {
         const hash = await connection.sendTransaction(vt.transaction);
         await connection.confirmTransaction(
-          {
-            signature: hash,
-            ...vt.latestBlockhash,
-          },
-          "processed",
+            {
+              signature: hash,
+              ...vt.latestBlockhash,
+            },
+            "processed",
         );
         return hash;
       })(),
@@ -124,7 +123,6 @@ export const sendTransactionWithRetry = async (
         throw Error("Timeout");
       })(),
     ]);
-    return hash;
   } catch (e: any) {
     console.log(e.message);
     const conditions = [

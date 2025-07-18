@@ -1,0 +1,8 @@
+services:
+  vsol-payment-bot:
+    build: .
+    restart: always
+    environment:
+      - CRON_SCHEDULE=0 0 * * *
+    env_file:
+      - .env

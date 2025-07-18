@@ -2,9 +2,13 @@
   "name": "saas-payment-bot",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "run": "npx tsx bot.ts"
+    "build": "tsup src/bot.ts",
+    "clean": "rm -rf dist node_modules",
+    "dev": "tsx src/bot.ts",
+    "start": "node dist/bot.js"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +21,15 @@
     "@solana/web3.js": "^1.98.2",
     "@thevault/zod-solana": "^0.1.0",
     "bignumber.js": "^9.3.0",
+    "bn.js": "^5.2.2",
+    "cron": "^4.3.2",
     "dotenv": "^17.0.1",
     "zod": "^3.25.74"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.2.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
   }
 }

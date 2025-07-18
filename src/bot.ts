@@ -7,11 +7,12 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import * as dotenv from "dotenv";
-import { sendTransactionWithRetry } from "./transaction";
+import { sendTransactionWithRetry } from "./transaction.js";
 import { z } from "zod";
-import vaultInvoicerIDL from "./IDL/vaultInvoicer.json";
+import vaultInvoicerIDL from "../IDL/vaultInvoicer.json";
 import BigNumber from "bignumber.js";
-import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
+import {AnchorProvider, Program} from "@coral-xyz/anchor";
+import { BN } from "bn.js";
 import {
   Provider,
   SignerWallet,
@@ -25,12 +26,13 @@ import {
 } from "@saberhq/token-utils";
 import { depositSol, stakePoolInfo } from "@solana/spl-stake-pool";
 import { zPublicKey } from "@thevault/zod-solana";
+import { CronJob } from "cron";
 
 const FIRST_INVOICE_EPOCH = 780;
 
 dotenv.config();
 
-const { RPC_URL, VOTE_KEY, PRIVATE_KEY } = process.env;
+const { RPC_URL, VOTE_KEY, PRIVATE_KEY, CRON_SCHEDULE } = process.env;
 
 if (!RPC_URL) {
   throw Error("No RPC URL set");
@@ -256,7 +258,7 @@ const payInvoices = async () => {
   console.log(invoices);
   if (invoices.length === 0) {
     console.log("No invoices to pay");
-    process.exit();
+    return
   }
   const tx = await setupPayInvoiceTx(payer, invoices);
   const hash = await sendTransactionWithRetry(
@@ -270,4 +272,15 @@ const payInvoices = async () => {
   console.log(hash);
 };
 
-payInvoices();
+if (CRON_SCHEDULE) {
+  console.log("Scheduling cron job to run at", CRON_SCHEDULE);
+  const cronJob = CronJob.from({
+    cronTime: CRON_SCHEDULE,
+    onTick: payInvoices,
+    runOnInit: true,
+    start: true
+  })
+} else {
+  console.log("No cron schedule provided");
+  payInvoices().catch(console.error);
+}
