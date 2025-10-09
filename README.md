@@ -19,3 +19,9 @@ VOTE_KEY=validator vote account public key
 The payer wallet can be any wallet that pays the SaaS invoices, so it does not have to be a wallet connected to your validator. The private key should be in the `[1,2,3,...]` format.
 
 You can of course run this script locally in your own environment as well.
+
+## Containerized version
+
+The main branch contains code to run the bot inside Github actions. If you want to automate the bot in your own containerised environment with more modern dev tools, @mindrunner created this PR that introduces significant changes to modernize and enhance the SaaS Payment Bot project, including improvements in build processes, deployment options, and code quality. Key updates include the introduction of Docker support, a shift to Node.js 24, improved environment configuration, and the addition of a recurring job feature via cron. Below is a categorized summary of the most important changes:
+
+[https://github.com/SolanaVault/saas-payment-bot/pull/1](Go to PR)
