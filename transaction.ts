@@ -25,7 +25,7 @@ const getCUsForTx = async (
   const transaction = new VersionedTransaction(messageV0);
   const simulation = await connection.simulateTransaction(transaction);
   if (simulation.value.unitsConsumed === 0) {
-    if (retryNum >= 900) {
+    if (retryNum >= 10) {
       return 1.4e6;
     }
     await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -134,7 +134,7 @@ export const sendTransactionWithRetry = async (
     ];
     if (
       conditions.some(
-        (condition) => e.message.includes(condition) && retryNum < 100,
+        (condition) => e.message.includes(condition) && retryNum < 5,
       )
     ) {
       console.log("Retrying...", retryNum, "-", e.message);

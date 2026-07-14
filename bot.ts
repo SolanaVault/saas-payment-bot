@@ -25,12 +25,15 @@ import {
 } from "@saberhq/token-utils";
 import { depositSol, stakePoolInfo } from "@solana/spl-stake-pool";
 import { zPublicKey } from "@thevault/zod-solana";
+import { notifyFailure, notifyRankAlert, notifySuccess } from "./notify";
+import { getDirectedStakeRank } from "./directedRank";
 
 const FIRST_INVOICE_EPOCH = 780;
+const RANK_ALERT_THRESHOLD = Number(process.env.RANK_ALERT_THRESHOLD ?? 80);
 
 dotenv.config();
 
-const { RPC_URL, VOTE_KEY, PRIVATE_KEY } = process.env;
+const { RPC_URL, VOTE_KEY, PRIVATE_KEY, DISCORD_WEBHOOK_URL } = process.env;
 
 if (!RPC_URL) {
   throw Error("No RPC URL set");
@@ -40,6 +43,11 @@ if (!VOTE_KEY) {
 }
 if (!PRIVATE_KEY) {
   throw Error("No PRIVATE_KEY set");
+}
+if (!DISCORD_WEBHOOK_URL) {
+  console.warn(
+    "DISCORD_WEBHOOK_URL not set — Discord notifications are disabled.",
+  );
 }
 
 /**
@@ -247,27 +255,85 @@ const setupPayInvoiceTx = async (signer: Keypair, invoices: Invoice[]) => {
   return { instructions: allIXs, signers: allSigners };
 };
 
-const payInvoices = async () => {
-  const connection = new Connection(RPC_URL);
-  const payer = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(PRIVATE_KEY)));
-
-  // Get invoices that need to be paid
-  const invoices = await getInvoices(new PublicKey(VOTE_KEY));
-  console.log(invoices);
-  if (invoices.length === 0) {
-    console.log("No invoices to pay");
-    process.exit();
+/**
+ * Checks the validator's rank on The Vault's "Directed Stake Leaders" board
+ * and sends a Discord alert if it dropped below RANK_ALERT_THRESHOLD (or is
+ * missing entirely). Never throws — a rank-check failure must not affect
+ * payment behavior.
+ */
+const checkDirectedRank = async () => {
+  try {
+    const result = await getDirectedStakeRank(VOTE_KEY);
+    if (result.found) {
+      console.log(
+        `Directed stake rank: #${result.rank} of ${result.totalLeaders} leaders` +
+          ` | directed: ${result.directedSol.toFixed(2)} SOL` +
+          ` | source: ${result.sourceFile}`,
+      );
+      if (result.rank > RANK_ALERT_THRESHOLD) {
+        await notifyRankAlert(DISCORD_WEBHOOK_URL, {
+          ...result,
+          threshold: RANK_ALERT_THRESHOLD,
+        });
+      }
+    } else {
+      console.warn(
+        `Validator ${VOTE_KEY} not found among directed stake leaders (${result.sourceFile})`,
+      );
+      await notifyRankAlert(DISCORD_WEBHOOK_URL, {
+        ...result,
+        threshold: RANK_ALERT_THRESHOLD,
+      });
+    }
+  } catch (e: any) {
+    console.warn("Directed rank check failed:", e?.message ?? e);
   }
-  const tx = await setupPayInvoiceTx(payer, invoices);
-  const hash = await sendTransactionWithRetry(
-    connection,
-    tx.instructions,
-    [...tx.signers, payer],
-    payer,
-    [],
-  );
+};
 
-  console.log(hash);
+const payInvoices = async () => {
+  try {
+    const connection = new Connection(RPC_URL);
+    const payer = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(PRIVATE_KEY)),
+    );
+
+    // Get invoices that need to be paid
+    const invoices = await getInvoices(new PublicKey(VOTE_KEY));
+    console.log(invoices);
+    if (invoices.length === 0) {
+      console.log("No invoices to pay");
+      await checkDirectedRank();
+      process.exit();
+    }
+    const tx = await setupPayInvoiceTx(payer, invoices);
+    const hash = await sendTransactionWithRetry(
+      connection,
+      tx.instructions,
+      [...tx.signers, payer],
+      payer,
+      [],
+    );
+
+    console.log(hash);
+
+    await notifySuccess(DISCORD_WEBHOOK_URL, {
+      invoiceCount: invoices.length,
+      totalVsolLamports: invoices.reduce(
+        (acc, invoice) => acc + invoice.amountVsol,
+        0n,
+      ),
+      epochs: invoices.map((invoice) => invoice.epoch),
+      txHash: hash,
+    });
+
+  } catch (e: any) {
+    await notifyFailure(DISCORD_WEBHOOK_URL, {
+      error: String(e?.message ?? e),
+    });
+    throw e;
+  } finally {
+    await checkDirectedRank();
+  }
 };
 
 payInvoices();

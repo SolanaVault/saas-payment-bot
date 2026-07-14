@@ -14,11 +14,29 @@ If you mark the repository as private and have a free Github account, please kee
 RPC_URL=your rpc url
 PRIVATE_KEY=private key of payer wallet
 VOTE_KEY=validator vote account public key
+DISCORD_WEBHOOK_URL=optional Discord webhook URL for success/failure notifications
 ```
 
 The payer wallet can be any wallet that pays the SaaS invoices, so it does not have to be a wallet connected to your validator. The private key should be in the `[1,2,3,...]` format.
 
 You can of course run this script locally in your own environment as well.
+
+## Discord notifications (optional)
+
+If `DISCORD_WEBHOOK_URL` is set, the bot will post a rich embed to that Discord channel:
+
+- **On success** — a green embed with the number of invoices paid, total vSOL amount, a clickable Solscan link for the transaction, and the epochs paid.
+- **On failure** — a red embed with the error message.
+
+When there are no invoices to pay, the bot stays silent (no notification).
+
+To create a webhook:
+
+1. In Discord, go to the target channel → **Edit Channel** → **Integrations** → **Webhooks** → **New Webhook**.
+2. Copy the webhook URL.
+3. Add it to your repository secrets as `DISCORD_WEBHOOK_URL` (Settings → Secrets and variables → Actions → New repository secret).
+
+If the variable is not set, the bot simply skips notifications and behaves as before. Webhook errors are logged but never crash the bot.
 
 ## Containerized version
 
