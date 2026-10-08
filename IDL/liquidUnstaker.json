@@ -1,0 +1,2061 @@
+{
+  "address": "2rU1oCHtQ7WJUvy15tKtFvxdYNNSc3id7AzUcjeFSddo",
+  "metadata": {
+    "name": "liquid_unstaker",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "buy_lst",
+      "discriminator": [56, 97, 82, 138, 114, 186, 53, 12],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_lst_token_account",
+          "docs": ["The pool's token account holding the LST tokens"],
+          "writable": true
+        },
+        {
+          "name": "user",
+          "docs": [
+            "User's transfer authority and payer for the temporary wrapped SOL buffer account"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_wsol_account",
+          "docs": ["User's wrapped SOL account (source - paying for LST)"],
+          "writable": true
+        },
+        {
+          "name": "user_lst_account",
+          "docs": ["User's LST token account (destination - receiving LST)"],
+          "writable": true
+        },
+        {
+          "name": "lst_mint",
+          "docs": ["The LST token mint"]
+        },
+        {
+          "name": "native_mint",
+          "docs": [
+            "Native SOL mint required by SPL Token when initializing the temporary wSOL buffer"
+          ]
+        },
+        {
+          "name": "stake_pool",
+          "docs": ["The stake pool associated with this LST"]
+        },
+        {
+          "name": "lst_info",
+          "docs": [
+            "LST info PDA for mint -> stake_pool mapping (admin-managed allowlist entry)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "docs": ["The SOL vault of the pool"],
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account",
+          "docs": ["Manager fee account"],
+          "writable": true
+        },
+        {
+          "name": "wsol_buffer_account",
+          "docs": [
+            "Temporary wrapped SOL token account used to unwrap the user's payment into the SOL vault",
+            "then closed before returning."
+          ],
+          "writable": true
+        },
+        {
+          "name": "inventory_summary",
+          "docs": ["Inventory summary for the pool"],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "clock"
+        }
+      ],
+      "args": [
+        {
+          "name": "lst_amount",
+          "type": "u64"
+        },
+        {
+          "name": "maximum_lamports_in",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "create_or_update_token_metadata",
+      "discriminator": [203, 87, 105, 175, 156, 139, 235, 180],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Payer of the metadata account creation (in case not present already)"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_mint",
+          "docs": ["Token [Mint]."],
+          "writable": true
+        },
+        {
+          "name": "metadata_program"
+        },
+        {
+          "name": "metadata_info",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "name": "uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "deposit_sol",
+      "discriminator": [108, 81, 78, 117, 125, 155, 56, 200],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "lp_mint",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_lp_account",
+          "writable": true
+        },
+        {
+          "name": "inventory_summary",
+          "writable": true
+        },
+        {
+          "name": "clock"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "flash_borrow",
+      "discriminator": [166, 221, 220, 25, 61, 73, 127, 240],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "borrower",
+          "docs": [
+            "The borrower's account that will receive the flash loan (must sign)"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "instructions"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "flash_repay",
+      "discriminator": [182, 143, 19, 23, 39, 221, 184, 78],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "borrower",
+          "docs": ["The borrower's account that must repay the flash loan"],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "instructions"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "repay_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "halt_pool",
+      "discriminator": [205, 172, 171, 72, 154, 63, 98, 178],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "halted",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "initialize_pool",
+      "discriminator": [95, 180, 10, 172, 84, 174, 232, 40],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "lp_mint",
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "rent"
+        }
+      ],
+      "args": [
+        {
+          "name": "fee_max",
+          "type": "u32"
+        },
+        {
+          "name": "fee_min",
+          "type": "u32"
+        },
+        {
+          "name": "min_sol_for_min_fee",
+          "type": "u64"
+        },
+        {
+          "name": "manager_fee_pct",
+          "type": "u8"
+        },
+        {
+          "name": "vault_lamports_cap",
+          "type": "u64"
+        },
+        {
+          "name": "withdraw_sol_fee",
+          "type": "u16"
+        },
+        {
+          "name": "withdraw_stake_account_fee",
+          "type": "u16"
+        },
+        {
+          "name": "flash_loans_enabled",
+          "type": "bool"
+        },
+        {
+          "name": "flash_loan_fee",
+          "type": "u32"
+        },
+        {
+          "name": "min_buy_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "liquid_unstake_lst",
+      "discriminator": [84, 174, 251, 245, 108, 64, 33, 185],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_transfer_authority",
+          "signer": true
+        },
+        {
+          "name": "user_lst_account",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "user_sol_account",
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_validator_list",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_withdraw_authority"
+        },
+        {
+          "name": "stake_pool_manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "stake_pool_program"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "clock"
+        },
+        {
+          "name": "stake_history"
+        }
+      ],
+      "args": [
+        {
+          "name": "lst_amounts",
+          "type": {
+            "array": ["u64", 5]
+          }
+        },
+        {
+          "name": "minimum_lamports_out",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "liquid_unstake_lst_with_seed",
+      "discriminator": [205, 199, 161, 101, 239, 109, 148, 163],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_transfer_authority",
+          "signer": true
+        },
+        {
+          "name": "user_lst_account",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "user_sol_account",
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_validator_list",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_withdraw_authority"
+        },
+        {
+          "name": "stake_pool_manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "stake_pool_program"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "clock"
+        },
+        {
+          "name": "stake_history"
+        }
+      ],
+      "args": [
+        {
+          "name": "lst_amounts",
+          "type": {
+            "array": ["u64", 5]
+          }
+        },
+        {
+          "name": "minimum_lamports_out",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "stake_account_seed",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "liquid_unstake_lst_with_wrapped",
+      "discriminator": [88, 109, 224, 88, 64, 249, 243, 117],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_transfer_authority",
+          "signer": true
+        },
+        {
+          "name": "user_lst_account",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "user_sol_account",
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_validator_list",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_withdraw_authority"
+        },
+        {
+          "name": "stake_pool_manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "stake_pool_program"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "clock"
+        }
+      ],
+      "args": [
+        {
+          "name": "lst_amounts",
+          "type": {
+            "array": ["u64", 5]
+          }
+        },
+        {
+          "name": "minimum_lamports_out",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "liquid_unstake_lst_with_wrapped_seed",
+      "discriminator": [81, 151, 125, 105, 38, 28, 199, 104],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_transfer_authority",
+          "signer": true
+        },
+        {
+          "name": "user_lst_account",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "user_sol_account",
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_validator_list",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_withdraw_authority"
+        },
+        {
+          "name": "stake_pool_manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "stake_pool_program"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "clock"
+        }
+      ],
+      "args": [
+        {
+          "name": "lst_amounts",
+          "type": {
+            "array": ["u64", 5]
+          }
+        },
+        {
+          "name": "minimum_lamports_out",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "stake_account_seed",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "liquid_unstake_stake_account",
+      "discriminator": [6, 242, 242, 0, 61, 230, 96, 58],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "stake_account",
+          "writable": true
+        },
+        {
+          "name": "stake_account_info",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "user_sol_account",
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "clock"
+        }
+      ],
+      "args": [
+        {
+          "name": "minimum_lamports_out",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "sell_lst",
+      "discriminator": [100, 3, 79, 209, 191, 157, 180, 11],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_lst_token_account",
+          "docs": ["The pool's token account for holding the LST tokens"],
+          "writable": true
+        },
+        {
+          "name": "user_transfer_authority",
+          "docs": ["The user's transfer authority"],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_lst_account",
+          "docs": ["User's LST token account (source)"],
+          "writable": true
+        },
+        {
+          "name": "user_wsol_account",
+          "docs": ["User's wrapped SOL account (destination)"],
+          "writable": true
+        },
+        {
+          "name": "lst_mint",
+          "docs": ["The LST token mint"]
+        },
+        {
+          "name": "stake_pool",
+          "docs": ["The stake pool associated with this LST"]
+        },
+        {
+          "name": "lst_info",
+          "docs": [
+            "LST info PDA for mint -> stake_pool mapping (admin-managed allowlist entry)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "docs": ["The SOL vault of the pool"],
+          "writable": true
+        },
+        {
+          "name": "manager_fee_account",
+          "docs": ["Manager fee account"],
+          "writable": true
+        },
+        {
+          "name": "inventory_summary",
+          "docs": ["Inventory summary for the pool"],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "lst_amount",
+          "type": "u64"
+        },
+        {
+          "name": "minimum_lamports_out",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "sync_inventory",
+      "discriminator": [17, 58, 27, 193, 139, 86, 147, 216],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "maintenance_authority",
+          "docs": [
+            "Signer who pays for account creation if needed.",
+            "Normally the pool maintenance authority, but anyone can sign if the snapshot",
+            "is stale by >= PERMISSIONLESS_SYNC_STALE_EPOCHS epochs."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "inventory_summary",
+          "docs": ["Inventory summary PDA"],
+          "writable": true
+        },
+        {
+          "name": "inventory_sync_state",
+          "docs": [
+            "Inventory sync state PDA. Used for multi-transaction syncing when the pool holds many LST mints."
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unstake_pool_lsts",
+      "discriminator": [238, 17, 205, 84, 229, 236, 227, 118],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "maintenance_authority",
+          "docs": [
+            "Pool maintenance authority (must sign for this instruction)"
+          ],
+          "signer": true
+        },
+        {
+          "name": "pool_lst_token_account",
+          "docs": ["The pool's token account holding the LST tokens"],
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "stake_pool",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_validator_list",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_withdraw_authority"
+        },
+        {
+          "name": "stake_pool_manager_fee_account",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_mint",
+          "writable": true
+        },
+        {
+          "name": "stake_pool_program"
+        },
+        {
+          "name": "lst_info",
+          "docs": [
+            "LST info PDA for mint -> stake_pool mapping (admin-managed allowlist entry)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "inventory_summary",
+          "docs": ["Inventory summary for the pool"],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "clock"
+        }
+      ],
+      "args": [
+        {
+          "name": "lst_amounts",
+          "type": {
+            "array": ["u64", 5]
+          }
+        },
+        {
+          "name": "stake_account_seed",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "update",
+      "discriminator": [219, 200, 88, 176, 158, 63, 253, 127],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "clock"
+        },
+        {
+          "name": "stake_history"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_pool",
+      "discriminator": [239, 214, 170, 78, 36, 35, 30, 34],
+      "accounts": [
+        {
+          "name": "pool",
+          "docs": [
+            "The pool account - using AccountInfo to allow resizing from V2 to V3"
+          ],
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "manager_fee_account"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "rent"
+        }
+      ],
+      "args": [
+        {
+          "name": "fee_max",
+          "type": "u32"
+        },
+        {
+          "name": "fee_min",
+          "type": "u32"
+        },
+        {
+          "name": "min_sol_for_min_fee",
+          "type": "u64"
+        },
+        {
+          "name": "manager_fee_pct",
+          "type": "u8"
+        },
+        {
+          "name": "vault_lamports_cap",
+          "type": "u64"
+        },
+        {
+          "name": "withdraw_sol_fee",
+          "type": "u16"
+        },
+        {
+          "name": "withdraw_stake_account_fee",
+          "type": "u16"
+        },
+        {
+          "name": "flash_loans_enabled",
+          "type": "bool"
+        },
+        {
+          "name": "flash_loan_fee",
+          "type": "u32"
+        },
+        {
+          "name": "sell_lst_flat_fee",
+          "type": "u32"
+        },
+        {
+          "name": "buy_lst_flat_fee",
+          "type": "u32"
+        },
+        {
+          "name": "buy_lst_dynamic_fee_max",
+          "type": "u32"
+        },
+        {
+          "name": "expected_inflation_per_epoch",
+          "type": "u32"
+        },
+        {
+          "name": "max_epoch_progress_pct",
+          "type": "u8"
+        },
+        {
+          "name": "min_buy_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "max_rate_drift_bps",
+          "type": "u16"
+        },
+        {
+          "name": "maintenance_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "upsert_lst_info",
+      "discriminator": [191, 203, 33, 89, 39, 85, 151, 125],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "docs": ["Pool authority (must sign)"],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "lst_mint",
+          "docs": ["The LST mint"]
+        },
+        {
+          "name": "stake_pool",
+          "docs": ["The stake pool associated with this LST"]
+        },
+        {
+          "name": "lst_info",
+          "docs": [
+            "LST info PDA for mint -> stake_pool mapping (admin-managed allowlist entry)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "enabled",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_sol",
+      "discriminator": [145, 131, 74, 136, 65, 137, 42, 38],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "lp_mint",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_lp_account",
+          "writable": true
+        },
+        {
+          "name": "inventory_summary",
+          "writable": true
+        },
+        {
+          "name": "clock"
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "lp_tokens",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_stake_account",
+      "discriminator": [211, 85, 184, 65, 183, 177, 233, 217],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "sol_vault",
+          "writable": true
+        },
+        {
+          "name": "lp_mint",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_lp_account",
+          "writable": true
+        },
+        {
+          "name": "stake_account_destination",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "stake_account_source",
+          "docs": [
+            "The stake account must either 1) have enough delegated stake to cover the split amount + the minimum delegation (1 SOL currently),",
+            "OR 2) have exactly the amount of stake (plus reserve) that is being withdrawn."
+          ],
+          "writable": true
+        },
+        {
+          "name": "stake_account_info_source",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "stake_program"
+        },
+        {
+          "name": "clock"
+        },
+        {
+          "name": "inventory_summary",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "lp_tokens",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "InventorySummary",
+      "discriminator": [157, 77, 59, 213, 161, 246, 95, 57]
+    },
+    {
+      "name": "InventorySyncState",
+      "discriminator": [107, 193, 66, 247, 199, 51, 216, 134]
+    },
+    {
+      "name": "LstInfo",
+      "discriminator": [79, 113, 226, 60, 171, 8, 142, 33]
+    },
+    {
+      "name": "Pool",
+      "discriminator": [241, 154, 109, 4, 17, 177, 109, 188]
+    },
+    {
+      "name": "StakeAccountInfo",
+      "discriminator": [168, 159, 248, 231, 54, 98, 130, 203]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InsufficientSolVaultBalance",
+      "msg": "Insufficient SOL in the vault"
+    },
+    {
+      "code": 6001,
+      "name": "MathOverflow",
+      "msg": "Math operation overflow"
+    },
+    {
+      "code": 6002,
+      "name": "MathUnderflow",
+      "msg": "Math operation underflow"
+    },
+    {
+      "code": 6003,
+      "name": "NoFeesToClaim",
+      "msg": "No fees to claim."
+    },
+    {
+      "code": 6004,
+      "name": "StakePoolWithdrawalFailed",
+      "msg": "Failed to withdraw from SPL Stake Pool"
+    },
+    {
+      "code": 6005,
+      "name": "SetAuthorityFailed",
+      "msg": "Failed to set authority on stake account"
+    },
+    {
+      "code": 6006,
+      "name": "DeactivateStakeFailed",
+      "msg": "Failed to deactivate stake account."
+    },
+    {
+      "code": 6007,
+      "name": "InvalidWithdrawAuthority",
+      "msg": "InvalidWithdrawAuthority"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidStakeAccountOwner",
+      "msg": "Invalid stake account owner"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidStakeAccountState",
+      "msg": "Invalid stake account state"
+    },
+    {
+      "code": 6010,
+      "name": "UnauthorizedStakeAccount",
+      "msg": "Unauthorized stake account"
+    },
+    {
+      "code": 6011,
+      "name": "StakeAccountAlreadyProcessed",
+      "msg": "Stake account has already been processed."
+    },
+    {
+      "code": 6012,
+      "name": "StakeAccountMismatch",
+      "msg": "Stake accounts mismatch"
+    },
+    {
+      "code": 6013,
+      "name": "FailedToDeserialize",
+      "msg": "Failed to deserialize"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidRemainingAccounts",
+      "msg": "Remaining accounts passed are not valid"
+    },
+    {
+      "code": 6015,
+      "name": "StakeAccountLockupUnableToLoadLockup",
+      "msg": "Unable to load the lockup information of the stake account"
+    },
+    {
+      "code": 6016,
+      "name": "StakeAccountLockupIsInForce",
+      "msg": "The lockup of the stake account is in force"
+    },
+    {
+      "code": 6017,
+      "name": "StakeAccountNotFullyDeactivated",
+      "msg": "The stake account is not yet fully deactivated"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidStakePoolProgram",
+      "msg": "Unsppoorted stake pool program"
+    },
+    {
+      "code": 6019,
+      "name": "InsufficientLpTokenBalance",
+      "msg": "Insufficient LP tokens"
+    },
+    {
+      "code": 6020,
+      "name": "DepositMustBeLargerThanZero",
+      "msg": "Must deposit more than 0 lamports"
+    },
+    {
+      "code": 6021,
+      "name": "InvalidUserLpAccount",
+      "msg": "Invalid user LP account"
+    },
+    {
+      "code": 6022,
+      "name": "LpTokensToMintIsZero",
+      "msg": "Uanble to mint any LP tokens as the amount calculated is zero"
+    },
+    {
+      "code": 6023,
+      "name": "StakeAccountDoesNotBelongToPool",
+      "msg": "Stake account does not belong to pool"
+    },
+    {
+      "code": 6024,
+      "name": "FeeMaxLessThanFeeMin",
+      "msg": "fee_max cannot be lower than fee_min"
+    },
+    {
+      "code": 6025,
+      "name": "FeeMaxTooHigh",
+      "msg": "fee_max is set to a too high value"
+    },
+    {
+      "code": 6026,
+      "name": "ManagerFeePctTooHigh",
+      "msg": "manager_fee_pct is set to a too high value"
+    },
+    {
+      "code": 6027,
+      "name": "IncorrectMetadataAccount",
+      "msg": "Metadata account address is incorrect"
+    },
+    {
+      "code": 6028,
+      "name": "SolVaultLamportsCapReached",
+      "msg": "The cap has been reached for the pool's SOL vault"
+    },
+    {
+      "code": 6029,
+      "name": "SlippageExceeded",
+      "msg": "The slippage was exceeded"
+    },
+    {
+      "code": 6030,
+      "name": "SplitStakeFailed",
+      "msg": "Stake split failed"
+    },
+    {
+      "code": 6031,
+      "name": "WithdrawToStakeIncorrectAmount",
+      "msg": "The amount to withdraw to the stake account is incorrect, e.g. has to be at leats 1 SOL and the remaining balance must also be at least 1 SOL"
+    },
+    {
+      "code": 6032,
+      "name": "FlashLoanNotRepaidInSameTransaction",
+      "msg": "Flash loan not repaid in the same transaction"
+    },
+    {
+      "code": 6033,
+      "name": "FlashLoanRepaymentAmountInsufficient",
+      "msg": "Flash loan repayment amount is insufficient"
+    },
+    {
+      "code": 6034,
+      "name": "FlashLoanExceedsAvailableLiquidity",
+      "msg": "Flash loan amount exceeds available liquidity"
+    },
+    {
+      "code": 6035,
+      "name": "FlashBorrowAlreadyActive",
+      "msg": "Flash borrow already active - cannot borrow again without repaying"
+    },
+    {
+      "code": 6036,
+      "name": "NoActiveFlashLoan",
+      "msg": "No active flash loan to repay"
+    },
+    {
+      "code": 6037,
+      "name": "FlashRepayInstructionNotFound",
+      "msg": "Flash repay instruction not found in transaction"
+    },
+    {
+      "code": 6038,
+      "name": "InvalidFlashRepayInstruction",
+      "msg": "Invalid flash repay instruction accounts"
+    },
+    {
+      "code": 6039,
+      "name": "FlashLoansDisabled",
+      "msg": "Flash loans are disabled for this pool"
+    },
+    {
+      "code": 6040,
+      "name": "FlashLoanCpiNotAllowed",
+      "msg": "Flash loan instructions cannot be called via CPI"
+    },
+    {
+      "code": 6041,
+      "name": "FlashLoanActive",
+      "msg": "Cannot deposit or withdraw LP tokens while flash loan is active"
+    },
+    {
+      "code": 6042,
+      "name": "InvalidFlashLoanFee",
+      "msg": "Invalid flash loan fee configuration"
+    },
+    {
+      "code": 6043,
+      "name": "InvalidWithdrawFee",
+      "msg": "Invalid withdraw fee configuration"
+    },
+    {
+      "code": 6044,
+      "name": "InvalidStakeAccountInfoAddress",
+      "msg": "Invalid stake account info PDA address"
+    },
+    {
+      "code": 6045,
+      "name": "EpochTooFarProgressed",
+      "msg": "Epoch has progressed too far (>99%) to execute this instruction"
+    },
+    {
+      "code": 6046,
+      "name": "InsufficientPoolLstBalance",
+      "msg": "Pool does not own sufficient LST tokens"
+    },
+    {
+      "code": 6047,
+      "name": "InvalidStakePoolState",
+      "msg": "Invalid stake pool state"
+    },
+    {
+      "code": 6048,
+      "name": "PriceCalculationFailed",
+      "msg": "Price calculation failed"
+    },
+    {
+      "code": 6049,
+      "name": "VolatilityOverflow",
+      "msg": "Volatility calculation overflow"
+    },
+    {
+      "code": 6050,
+      "name": "InvalidInflationConfig",
+      "msg": "Invalid inflation configuration"
+    },
+    {
+      "code": 6051,
+      "name": "InvalidDynamicFeeConfig",
+      "msg": "Invalid dynamic fee configuration"
+    },
+    {
+      "code": 6052,
+      "name": "PoolLstInventoryMismatch",
+      "msg": "Pool LST inventory account mismatch"
+    },
+    {
+      "code": 6053,
+      "name": "InvalidParameter",
+      "msg": "Invalid parameter value"
+    },
+    {
+      "code": 6054,
+      "name": "MissingInventoryAccounts",
+      "msg": "Missing required inventory accounts"
+    },
+    {
+      "code": 6055,
+      "name": "InventoryTooStale",
+      "msg": "Inventory pricing snapshot too stale"
+    },
+    {
+      "code": 6056,
+      "name": "InventorySyncAlreadyInProgress",
+      "msg": "Inventory sync already in progress"
+    },
+    {
+      "code": 6057,
+      "name": "InventorySyncInProgress",
+      "msg": "Inventory sync in progress"
+    },
+    {
+      "code": 6058,
+      "name": "InventorySyncNotInProgress",
+      "msg": "Inventory sync not in progress"
+    },
+    {
+      "code": 6059,
+      "name": "InventorySyncEpochMismatch",
+      "msg": "Inventory sync epoch mismatch"
+    },
+    {
+      "code": 6060,
+      "name": "InventorySyncNotComplete",
+      "msg": "Inventory sync not complete"
+    },
+    {
+      "code": 6061,
+      "name": "TooManyActiveLstMints",
+      "msg": "Too many active LST mints"
+    },
+    {
+      "code": 6062,
+      "name": "InventorySummaryOutOfSync",
+      "msg": "Inventory summary would go negative; run sync_inventory to refresh inventory pricing"
+    },
+    {
+      "code": 6063,
+      "name": "InvalidPoolAccount",
+      "msg": "Invalid pool account"
+    },
+    {
+      "code": 6064,
+      "name": "InvalidAuthority",
+      "msg": "Invalid authority"
+    },
+    {
+      "code": 6065,
+      "name": "BuyAmountTooSmall",
+      "msg": "Buy amount below configured minimum"
+    },
+    {
+      "code": 6066,
+      "name": "UnauthorizedSyncInventory",
+      "msg": "Only the pool authority can sync inventory until the snapshot is stale by 3+ epochs"
+    },
+    {
+      "code": 6067,
+      "name": "PoolHalted",
+      "msg": "Pool is halted - all user operations are blocked"
+    },
+    {
+      "code": 6068,
+      "name": "ExchangeRateDriftExceeded",
+      "msg": "LST exchange rate deviates from the last recorded rate beyond the configured drift cap"
+    }
+  ],
+  "types": [
+    {
+      "name": "InventorySummary",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_value_snapshot",
+            "type": "u64"
+          },
+          {
+            "name": "snapshot_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "snapshot_progress",
+            "type": "u64"
+          },
+          {
+            "name": "snapshot_slot",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "sync_in_progress",
+            "type": "bool"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": ["u8", 6]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "InventorySyncState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch",
+            "type": "u64"
+          },
+          {
+            "name": "progress",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "accumulated_value",
+            "type": "u64"
+          },
+          {
+            "name": "expected_mints",
+            "type": "u32"
+          },
+          {
+            "name": "processed_mints",
+            "type": "u32"
+          },
+          {
+            "name": "in_progress",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": ["u8", 6]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "LstInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_pool_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "is_active",
+            "docs": [
+              "True if the pool currently holds a non-zero balance for this mint (in its ATA)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "last_synced_session_id",
+            "docs": [
+              "Marker used by `sync_inventory` to prevent duplicates across multi-tx sessions."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "enabled",
+            "docs": [
+              "Whether this LST is enabled for sell_lst and buy_lst operations.",
+              "Authority can disable an LST via upsert_lst_info to block new trades."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": ["u8", 1]
+            }
+          },
+          {
+            "name": "rate_history_epochs",
+            "docs": [
+              "Up to 5 epochs of recorded SOL/LST exchange rates (scaled by RATE_SCALE).",
+              "Rate = total_lamports * RATE_SCALE / pool_token_supply.",
+              "Populated by sync_inventory as a ring buffer (oldest evicted when full).",
+              "",
+              "Used as the baseline for the drift-check validation applied to sell_lst, buy_lst,",
+              "and unstake_pool_lsts: trades are rejected if the current rate deviates from the",
+              "most recent recorded rate by more than pool.max_rate_drift_bps. The full history",
+              "is retained for diagnostics and operator investigation (see record_rate /",
+              "last_recorded_rate)."
+            ],
+            "type": {
+              "array": ["u64", 5]
+            }
+          },
+          {
+            "name": "rate_history_rates",
+            "type": {
+              "array": ["u64", 5]
+            }
+          },
+          {
+            "name": "rate_history_len",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": ["The authority managing the pool"],
+            "type": "pubkey"
+          },
+          {
+            "name": "sol_vault",
+            "docs": ["The vault containing the SOL managed by the pool"],
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_mint",
+            "docs": [
+              "The LP mint of the pool, used by the liquidity provider instructions"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "manager_fee_account",
+            "docs": ["The manage account that will receive manager fees"],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_lp_tokens",
+            "docs": ["Total LP tokens minted"],
+            "type": "u64"
+          },
+          {
+            "name": "total_accrued_fees",
+            "docs": ["Total fees accrued in the pool"],
+            "type": "u64"
+          },
+          {
+            "name": "total_deactivating_stake",
+            "docs": [
+              "The total amount of stake in stake accounts marked for deactivation"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fee_max",
+            "docs": [
+              "The max fee that can be charged in basis points, 100% = FEE_PCT_DIVISOR"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "fee_min",
+            "docs": [
+              "The max fee that can be charged in basis points, 100% = FEE_PCT_DIVISOR"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "min_sol_for_min_fee",
+            "docs": [
+              "The minimum amount of SOL required in the pool to reach the minimum fee, in lamports"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "manager_fee_pct",
+            "docs": [
+              "The part of the fee that will go to the manager of the pool, in percentage points"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "docs": ["Bump seed for the pool PDA"],
+            "type": "u8"
+          },
+          {
+            "name": "sol_vault_bump",
+            "docs": ["Bump seed for the sol_vault PDA"],
+            "type": "u8"
+          },
+          {
+            "name": "sol_vault_lamports",
+            "docs": ["Accounting for the pool vault"],
+            "type": "u64"
+          },
+          {
+            "name": "sol_vault_lamports_cap",
+            "docs": ["Maximum amount of SOL that can be deposited in the pool"],
+            "type": "u64"
+          },
+          {
+            "name": "withdraw_sol_fee",
+            "type": "u16"
+          },
+          {
+            "name": "withdraw_stake_account_fee",
+            "type": "u16"
+          },
+          {
+            "name": "flash_loan_fee",
+            "docs": ["Flash loan fee, 100% = FEE_PCT_DIVISOR"],
+            "type": "u32"
+          },
+          {
+            "name": "flash_loan_borrowed_amount",
+            "docs": [
+              "Currently borrowed amount (used to track active flash loan)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "flash_loans_enabled",
+            "docs": ["Whether flash loans are enabled for this pool"],
+            "type": "bool"
+          },
+          {
+            "name": "total_stake_rewards_withdrawn",
+            "docs": ["Rewards that have been withdrawn from stake accounts"],
+            "type": "u64"
+          },
+          {
+            "name": "last_stake_rewards_withdrawn_epoch",
+            "docs": ["The epoch that stake rewards were last withdrawn"],
+            "type": "u32"
+          },
+          {
+            "name": "expected_inflation_per_epoch",
+            "docs": [
+              "Expected inflation per epoch in basis points (100,000 = 100%)",
+              "Used for adjusting LST prices based on epoch progress",
+              "Default: set in `initialize_pool`"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "sell_lst_flat_fee",
+            "docs": ["Flat fee for sell_lst instruction in basis points"],
+            "type": "u32"
+          },
+          {
+            "name": "buy_lst_flat_fee",
+            "docs": ["Flat fee for buy_lst instruction in basis points"],
+            "type": "u32"
+          },
+          {
+            "name": "buy_lst_dynamic_fee_max",
+            "docs": [
+              "Maximum dynamic fee for buy_lst based on activity (basis points)"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "activity_accumulator",
+            "docs": [
+              "Activity accumulator for dynamic fee calculation",
+              "Tracks cumulative buy volume with time-based decay (in lamports)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_activity_slot",
+            "docs": [
+              "Slot number of the last buy_lst trade",
+              "Used for time-based decay of activity_accumulator"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_epoch_progress_pct",
+            "docs": [
+              "Maximum epoch progress percentage (0-100) before trading is blocked",
+              "This allows admin time to unstake pool LSTs before epoch rollover",
+              "Default: 99 (blocks trades when epoch is 99% complete)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "inventory_sync_session_id",
+            "docs": ["Monotonic nonce used by `sync_inventory` sessions."],
+            "type": "u32"
+          },
+          {
+            "name": "active_lst_mints_count",
+            "docs": [
+              "Number of active LST mints (where the pool ATA balance is non-zero).",
+              "This is maintained by `buy_lst`, `sell_lst`, and `unstake_pool_lsts`."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "min_buy_lamports",
+            "docs": [
+              "Minimum total cost (lamports) required for buy_lst; 0 disables the check."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_rate_drift_bps",
+            "docs": [
+              "Maximum allowed drift (basis points, 100% = FEE_PCT_DIVISOR) between the current",
+              "SOL/LST exchange rate and the most recently recorded rate in LstInfo.rate_history.",
+              "Applied by sell_lst, buy_lst, and unstake_pool_lsts to reject trades when the",
+              "underlying stake pool's rate has changed unexpectedly (compromise, inflation attack,",
+              "or slashing beyond expected bounds). Capped by MAX_RATE_DRIFT_BPS_CAP."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "halted_at_epoch",
+            "docs": [
+              "Emergency halt state. Some(epoch) means all user-facing operations are blocked",
+              "starting from epoch, UNTIL HALT_MAX_EPOCHS epochs have passed, at which point",
+              "the halt auto-expires and operations resume. None means not halted.",
+              "The admin can re-halt when a halt expires. Auto-expiry prevents funds from being",
+              "locked indefinitely if the admin becomes unresponsive (key loss, infrastructure",
+              "failure, malicious intent)."
+            ],
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "maintenance_authority",
+            "docs": [
+              "Authority allowed to run maintenance operations that keep pool accounting fresh and",
+              "move pool-owned LST inventory into deactivating stake."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StakeAccountInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stake_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}

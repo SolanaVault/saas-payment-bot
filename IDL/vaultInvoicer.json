@@ -1,519 +1,699 @@
 {
-    "address": "EpoivtVh9dgWFxE6MYgF3YnobYWtZr2VfCuP7iT3N927",
-    "metadata": {
-      "name": "epoch_invoicer",
-      "version": "0.1.0",
-      "spec": "0.1.0",
-      "description": "Invoices validators for payments related to a specific epoch."
+  "address": "EpoivtVh9dgWFxE6MYgF3YnobYWtZr2VfCuP7iT3N927",
+  "metadata": {
+    "name": "epoch_invoicer",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Invoices validators for payments related to a specific epoch."
+  },
+  "instructions": [
+    {
+      "name": "accept_owner",
+      "docs": ["(Pending owner only) Accepts the owner transfer."],
+      "discriminator": [176, 23, 41, 28, 23, 111, 8, 4],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "writable": true
+        },
+        {
+          "name": "pending_owner",
+          "signer": true,
+          "relations": ["invoicer"]
+        }
+      ],
+      "args": []
     },
-    "instructions": [
-      {
-        "name": "accept_owner",
-        "docs": ["(Pending owner only) Accepts the owner transfer."],
-        "discriminator": [176, 23, 41, 28, 23, 111, 8, 4],
-        "accounts": [
-          {
-            "name": "invoicer",
-            "writable": true
-          },
-          {
-            "name": "pending_owner",
-            "signer": true,
-            "relations": ["invoicer"]
+    {
+      "name": "close_invoice",
+      "docs": [
+        "(Close authority only) Closes a fully-paid invoice account and",
+        "returns its rent to `rent_destination`. The invoice's epoch must",
+        "be at least [`MIN_EPOCHS_BEFORE_CLOSE`] epochs in the past."
+      ],
+      "discriminator": [217, 64, 46, 247, 231, 36, 118, 252],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "relations": ["invoice"]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "close_authority",
+          "signer": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "rent_destination",
+          "docs": ["Account that receives the reclaimed rent."],
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_invoice",
+      "docs": ["(Invoice creator only) Creates a new invoice."],
+      "discriminator": [154, 170, 31, 135, 134, 100, 156, 146],
+      "accounts": [
+        {
+          "name": "invoicer"
+        },
+        {
+          "name": "invoice",
+          "docs": ["The invoice to be created."],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [105, 110, 118, 111, 105, 99, 101]
+              },
+              {
+                "kind": "account",
+                "path": "invoicer"
+              },
+              {
+                "kind": "account",
+                "path": "vote_account"
+              },
+              {
+                "kind": "arg",
+                "path": "epoch"
+              }
+            ]
           }
-        ],
-        "args": []
-      },
-      {
-        "name": "create_invoice",
-        "docs": ["(Invoice creator only) Creates a new invoice."],
-        "discriminator": [154, 170, 31, 135, 134, 100, 156, 146],
-        "accounts": [
-          {
-            "name": "invoicer"
-          },
-          {
-            "name": "invoice",
-            "docs": ["The invoice to be created."],
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [105, 110, 118, 111, 105, 99, 101]
-                },
-                {
-                  "kind": "account",
-                  "path": "invoicer"
-                },
-                {
-                  "kind": "account",
-                  "path": "vote_account"
-                },
-                {
-                  "kind": "arg",
-                  "path": "epoch"
-                }
+        },
+        {
+          "name": "invoice_creator",
+          "docs": ["The invoice creator."],
+          "signer": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "vote_account",
+          "docs": ["The vote account to create the invoice for."]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "epoch",
+          "type": "u64"
+        },
+        {
+          "name": "amount_vsol",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_invoicer",
+      "docs": [
+        "Creates a new [Invoicer].",
+        "",
+        "Invoices may only be processed by the [Invoicer] that created them."
+      ],
+      "discriminator": [2, 214, 217, 244, 163, 147, 228, 243],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [105, 110, 118, 111, 105, 99, 101, 114]
+              },
+              {
+                "kind": "account",
+                "path": "invoicer_base_key"
+              }
+            ]
+          }
+        },
+        {
+          "name": "invoicer_base_key",
+          "docs": [
+            "Keypair used to create the [Invoicer] deterministically across networks."
+          ],
+          "signer": true
+        },
+        {
+          "name": "owner",
+          "docs": ["The owner of the [Invoicer]."],
+          "signer": true
+        },
+        {
+          "name": "payment_withdrawer",
+          "docs": [
+            "The account that can withdraw payments from the [Invoicer]."
+          ]
+        },
+        {
+          "name": "invoice_creator",
+          "docs": ["The account that can create new invoices."]
+        },
+        {
+          "name": "vsol_mint",
+          "docs": ["vSOL mint."],
+          "address": "vSoLxydx6akxyMD9XEcPvGYNGq6Nn66oqVb3UkGkei7"
+        },
+        {
+          "name": "vsol_reserves",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "invoicer"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206,
+                  235, 121, 172, 28, 180, 133, 237, 95, 91, 55, 145, 58, 140,
+                  245, 133, 126, 255, 0, 169
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vsol_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142,
+                13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216,
+                219, 233, 248, 89
               ]
             }
-          },
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "mark_invoice_paid",
+      "docs": [
+        "(Mark paid authority only) Marks an invoice as paid without transferring any",
+        "vSOL. Intended for off-chain settlements or write-offs."
+      ],
+      "discriminator": [22, 190, 62, 17, 82, 172, 89, 243],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "relations": ["invoice"]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "mark_paid_authority",
+          "signer": true,
+          "relations": ["invoicer"]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "pay_invoice",
+      "docs": ["Pays an invoice."],
+      "discriminator": [104, 6, 62, 239, 197, 206, 208, 220],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "relations": ["invoice"]
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "source",
+          "writable": true
+        },
+        {
+          "name": "source_authority",
+          "docs": [
+            "The authority of the source account.",
+            "This is either the subscriber or a delegate (e.g. the auto-debit program)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "vsol_reserves",
+          "writable": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount_vsol",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_close_authority",
+      "docs": [
+        "(Owner only) Sets the close authority. On the first call for an",
+        "[Invoicer] created before this field existed, the account is",
+        "reallocated to make room for the new field."
+      ],
+      "discriminator": [144, 183, 224, 104, 83, 213, 219, 172],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "docs": [
+            "The [Invoicer]. Reallocated on first call to fit the new",
+            "`close_authority` field if the account was created before the",
+            "field existed."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "close_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_invoice_creator",
+      "docs": ["(Owner only) Sets the invoice creator."],
+      "discriminator": [145, 201, 71, 222, 116, 153, 140, 249],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "invoice_creator",
+          "docs": ["The new invoice creator."]
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_creator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_mark_paid_authority",
+      "docs": [
+        "(Owner only) Sets the mark paid authority. On the first call for",
+        "an [Invoicer] created before this field existed, the account is",
+        "reallocated to make room for the new field."
+      ],
+      "discriminator": [228, 31, 60, 251, 33, 130, 116, 42],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "docs": [
+            "The [Invoicer]. Reallocated on first call to fit the new",
+            "`mark_paid_authority` field if the account was created before the",
+            "field existed."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "mark_paid_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_payment_withdrawer",
+      "docs": ["(Owner only) Sets the payment withdrawer."],
+      "discriminator": [215, 26, 67, 236, 132, 238, 124, 141],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "payment_withdrawer",
+          "docs": ["The new payment withdrawer."]
+        }
+      ],
+      "args": [
+        {
+          "name": "payment_withdrawer",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "transfer_owner",
+      "docs": ["(Owner only) Begins an ownership transfer."],
+      "discriminator": [245, 25, 221, 175, 106, 229, 225, 45],
+      "accounts": [
+        {
+          "name": "invoicer",
+          "writable": true
+        },
+        {
+          "name": "pending_owner"
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["invoicer"]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw_payments",
+      "docs": [
+        "(Payment withdrawer only) Withdraws payments to a specified address."
+      ],
+      "discriminator": [191, 60, 94, 80, 220, 45, 13, 224],
+      "accounts": [
+        {
+          "name": "invoicer"
+        },
+        {
+          "name": "payment_withdrawer",
+          "docs": [
+            "The account that can withdraw payments from the [Invoicer]."
+          ],
+          "signer": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "vsol_reserves",
+          "writable": true,
+          "relations": ["invoicer"]
+        },
+        {
+          "name": "payment_destination",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Invoice",
+      "discriminator": [51, 194, 250, 114, 6, 104, 18, 164]
+    },
+    {
+      "name": "Invoicer",
+      "discriminator": [130, 60, 88, 174, 12, 36, 237, 134]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvariantFailed",
+      "msg": "Invariant failed"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidOwner",
+      "msg": "Invalid owner"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidPendingOwner",
+      "msg": "Invalid pending owner"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidPaymentWithdrawer",
+      "msg": "Invalid payment withdrawer"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidInvoiceCreator",
+      "msg": "Invalid invoice creator"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidSubscriber",
+      "msg": "Invalid subscriber"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidInvoicer",
+      "msg": "Invalid invoicer"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidInvoicerVsolReserves",
+      "msg": "Invalid invoicer vSOL reserves"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidCloseAuthority",
+      "msg": "Invalid close authority"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidMarkPaidAuthority",
+      "msg": "Invalid mark paid authority"
+    },
+    {
+      "code": 6010,
+      "name": "InvoiceNotFullyPaid",
+      "msg": "Invoice is not fully paid"
+    },
+    {
+      "code": 6011,
+      "name": "InvoiceTooRecent",
+      "msg": "Invoice is too recent to close"
+    },
+    {
+      "code": 6012,
+      "name": "EpochOutsideCreationWindow",
+      "msg": "Invoice epoch is outside the allowed creation window"
+    },
+    {
+      "code": 6013,
+      "name": "MathOverflow",
+      "msg": "Overflow during a math operation"
+    }
+  ],
+  "types": [
+    {
+      "name": "Invoice",
+      "docs": ["Invoice."],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            "name": "invoice_creator",
-            "docs": ["The invoice creator."],
-            "signer": true,
-            "relations": ["invoicer"]
+            "name": "invoicer",
+            "docs": ["The [Invoicer] that created this invoice."],
+            "type": "pubkey"
           },
           {
             "name": "vote_account",
-            "docs": ["The vote account to create the invoice for."]
+            "docs": ["The vote account that this invoice is for."],
+            "type": "pubkey"
           },
-          {
-            "name": "payer",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          }
-        ],
-        "args": [
           {
             "name": "epoch",
+            "docs": ["The epoch that this invoice is for."],
             "type": "u64"
           },
           {
             "name": "amount_vsol",
+            "docs": ["Total amount of the invoice to pay in vSOL."],
+            "type": "u64"
+          },
+          {
+            "name": "balance_outstanding",
+            "docs": [
+              "The amount of vSOL that has been paid towards this invoice.",
+              "If non-zero, the invoice is outstanding.",
+              "If zero, the invoice is paid."
+            ],
             "type": "u64"
           }
         ]
+      }
+    },
+    {
+      "name": "Invoicer",
+      "docs": [
+        "Holds global state about the invoicer.",
+        "",
+        "To enable automatic debits of subscription payments, the",
+        "subscriber must delegate their token account to this account."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
       },
-      {
-        "name": "create_invoicer",
-        "docs": [
-          "Creates a new [Invoicer].",
-          "",
-          "Invoices may only be processed by the [Invoicer] that created them."
-        ],
-        "discriminator": [2, 214, 217, 244, 163, 147, 228, 243],
-        "accounts": [
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            "name": "invoicer",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [105, 110, 118, 111, 105, 99, 101, 114]
-                },
-                {
-                  "kind": "account",
-                  "path": "invoicer_base_key"
-                }
-              ]
+            "name": "base_key",
+            "docs": [
+              "Pubkey which the bump of the [Invoicer] is derived from."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "docs": ["The bump of the [Invoicer]."],
+            "type": "u8"
+          },
+          {
+            "name": "_padding",
+            "docs": ["Unused for struct alignment."],
+            "type": {
+              "array": ["u8", 7]
             }
           },
           {
-            "name": "invoicer_base_key",
-            "docs": [
-              "Keypair used to create the [Invoicer] deterministically across networks."
-            ],
-            "signer": true
-          },
-          {
-            "name": "owner",
-            "docs": ["The owner of the [Invoicer]."],
-            "signer": true
-          },
-          {
-            "name": "payment_withdrawer",
-            "docs": [
-              "The account that can withdraw payments from the [Invoicer]."
-            ]
-          },
-          {
-            "name": "invoice_creator",
-            "docs": ["The account that can create new invoices."]
-          },
-          {
-            "name": "vsol_mint",
-            "docs": ["vSOL mint."],
-            "address": "vSoLxydx6akxyMD9XEcPvGYNGq6Nn66oqVb3UkGkei7"
-          },
-          {
             "name": "vsol_reserves",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "account",
-                  "path": "invoicer"
-                },
-                {
-                  "kind": "const",
-                  "value": [
-                    6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206,
-                    235, 121, 172, 28, 180, 133, 237, 95, 91, 55, 145, 58, 140,
-                    245, 133, 126, 255, 0, 169
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "vsol_mint"
-                }
-              ],
-              "program": {
-                "kind": "const",
-                "value": [
-                  140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142,
-                  13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216,
-                  219, 233, 248, 89
-                ]
-              }
-            }
+            "docs": ["The vSOL reserves account for the [Invoicer]."],
+            "type": "pubkey"
           },
           {
-            "name": "payer",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          },
-          {
-            "name": "token_program",
-            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-          },
-          {
-            "name": "associated_token_program",
-            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-          }
-        ],
-        "args": []
-      },
-      {
-        "name": "pay_invoice",
-        "docs": ["Pays an invoice."],
-        "discriminator": [104, 6, 62, 239, 197, 206, 208, 220],
-        "accounts": [
-          {
-            "name": "invoicer",
-            "relations": ["invoice"]
-          },
-          {
-            "name": "invoice",
-            "writable": true
-          },
-          {
-            "name": "source",
-            "writable": true
-          },
-          {
-            "name": "source_authority",
+            "name": "owner",
             "docs": [
-              "The authority of the source account.",
-              "This is either the subscriber or a delegate (e.g. the auto-debit program)."
+              "Allows changing the `fee_recipient` and `invoice_creator`."
             ],
-            "signer": true
-          },
-          {
-            "name": "vsol_reserves",
-            "writable": true,
-            "relations": ["invoicer"]
-          },
-          {
-            "name": "token_program",
-            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-          }
-        ],
-        "args": [
-          {
-            "name": "amount_vsol",
-            "type": "u64"
-          }
-        ]
-      },
-      {
-        "name": "set_invoice_creator",
-        "docs": ["(Owner only) Sets the invoice creator."],
-        "discriminator": [145, 201, 71, 222, 116, 153, 140, 249],
-        "accounts": [
-          {
-            "name": "invoicer",
-            "writable": true
-          },
-          {
-            "name": "owner",
-            "signer": true,
-            "relations": ["invoicer"]
-          },
-          {
-            "name": "invoice_creator",
-            "docs": ["The new invoice creator."]
-          }
-        ],
-        "args": [
-          {
-            "name": "invoice_creator",
             "type": "pubkey"
-          }
-        ]
-      },
-      {
-        "name": "set_payment_withdrawer",
-        "docs": ["(Owner only) Sets the payment withdrawer."],
-        "discriminator": [215, 26, 67, 236, 132, 238, 124, 141],
-        "accounts": [
-          {
-            "name": "invoicer",
-            "writable": true
           },
           {
-            "name": "owner",
-            "signer": true,
-            "relations": ["invoicer"]
-          },
-          {
-            "name": "payment_withdrawer",
-            "docs": ["The new payment withdrawer."]
-          }
-        ],
-        "args": [
-          {
-            "name": "payment_withdrawer",
+            "name": "pending_owner",
+            "docs": [
+              "If ownership is being transferred, this is the new owner."
+            ],
             "type": "pubkey"
-          }
-        ]
-      },
-      {
-        "name": "transfer_owner",
-        "docs": ["(Owner only) Begins an ownership transfer."],
-        "discriminator": [245, 25, 221, 175, 106, 229, 225, 45],
-        "accounts": [
-          {
-            "name": "invoicer",
-            "writable": true
-          },
-          {
-            "name": "pending_owner"
-          },
-          {
-            "name": "owner",
-            "signer": true,
-            "relations": ["invoicer"]
-          }
-        ],
-        "args": []
-      },
-      {
-        "name": "withdraw_payments",
-        "docs": [
-          "(Payment withdrawer only) Withdraws payments to a specified address."
-        ],
-        "discriminator": [191, 60, 94, 80, 220, 45, 13, 224],
-        "accounts": [
-          {
-            "name": "invoicer"
           },
           {
             "name": "payment_withdrawer",
             "docs": [
               "The account that can withdraw payments from the [Invoicer]."
             ],
-            "signer": true,
-            "relations": ["invoicer"]
+            "type": "pubkey"
           },
           {
-            "name": "vsol_reserves",
-            "writable": true,
-            "relations": ["invoicer"]
+            "name": "invoice_creator",
+            "docs": ["The account that can create new invoices."],
+            "type": "pubkey"
           },
           {
-            "name": "payment_destination",
-            "writable": true
+            "name": "close_authority",
+            "docs": [
+              "The account permitted to close fully-paid invoices.",
+              "",
+              "For [Invoicer] accounts created before this field existed, this",
+              "is zero until the owner calls `set_close_authority`, which also",
+              "reallocs the account."
+            ],
+            "type": "pubkey"
           },
           {
-            "name": "token_program",
-            "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-          }
-        ],
-        "args": [
-          {
-            "name": "amount",
-            "type": "u64"
+            "name": "mark_paid_authority",
+            "docs": [
+              "The account permitted to mark invoices as paid.",
+              "",
+              "For [Invoicer] accounts created before this field existed, this",
+              "is zero until the owner calls `set_mark_paid_authority`, which",
+              "also reallocs the account."
+            ],
+            "type": "pubkey"
           }
         ]
       }
-    ],
-    "accounts": [
-      {
-        "name": "Invoice",
-        "discriminator": [51, 194, 250, 114, 6, 104, 18, 164]
-      },
-      {
-        "name": "Invoicer",
-        "discriminator": [130, 60, 88, 174, 12, 36, 237, 134]
-      }
-    ],
-    "errors": [
-      {
-        "code": 6000,
-        "name": "InvariantFailed",
-        "msg": "Invariant failed"
-      },
-      {
-        "code": 6001,
-        "name": "InvalidOwner",
-        "msg": "Invalid owner"
-      },
-      {
-        "code": 6002,
-        "name": "InvalidPendingOwner",
-        "msg": "Invalid pending owner"
-      },
-      {
-        "code": 6003,
-        "name": "InvalidPaymentWithdrawer",
-        "msg": "Invalid payment withdrawer"
-      },
-      {
-        "code": 6004,
-        "name": "InvalidInvoiceCreator",
-        "msg": "Invalid invoice creator"
-      },
-      {
-        "code": 6005,
-        "name": "InvalidSubscriber",
-        "msg": "Invalid subscriber"
-      },
-      {
-        "code": 6006,
-        "name": "InvalidInvoicer",
-        "msg": "Invalid invoicer"
-      },
-      {
-        "code": 6007,
-        "name": "InvalidInvoicerVsolReserves",
-        "msg": "Invalid invoicer vSOL reserves"
-      },
-      {
-        "code": 6008,
-        "name": "MathOverflow",
-        "msg": "Overflow during a math operation"
-      }
-    ],
-    "types": [
-      {
-        "name": "Invoice",
-        "docs": ["Invoice."],
-        "serialization": "bytemuck",
-        "repr": {
-          "kind": "c"
-        },
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "invoicer",
-              "docs": ["The [Invoicer] that created this invoice."],
-              "type": "pubkey"
-            },
-            {
-              "name": "vote_account",
-              "docs": ["The vote account that this invoice is for."],
-              "type": "pubkey"
-            },
-            {
-              "name": "epoch",
-              "docs": ["The epoch that this invoice is for."],
-              "type": "u64"
-            },
-            {
-              "name": "amount_vsol",
-              "docs": ["Total amount of the invoice to pay in vSOL."],
-              "type": "u64"
-            },
-            {
-              "name": "balance_outstanding",
-              "docs": [
-                "The amount of vSOL that has been paid towards this invoice.",
-                "If non-zero, the invoice is outstanding.",
-                "If zero, the invoice is paid."
-              ],
-              "type": "u64"
-            }
-          ]
-        }
-      },
-      {
-        "name": "Invoicer",
-        "docs": [
-          "Holds global state about the invoicer.",
-          "",
-          "To enable automatic debits of subscription payments, the",
-          "subscriber must delegate their token account to this account."
-        ],
-        "serialization": "bytemuck",
-        "repr": {
-          "kind": "c"
-        },
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "base_key",
-              "docs": [
-                "Pubkey which the bump of the [Invoicer] is derived from."
-              ],
-              "type": "pubkey"
-            },
-            {
-              "name": "bump",
-              "docs": ["The bump of the [Invoicer]."],
-              "type": "u8"
-            },
-            {
-              "name": "_padding",
-              "docs": ["Unused for struct alignment."],
-              "type": {
-                "array": ["u8", 7]
-              }
-            },
-            {
-              "name": "vsol_reserves",
-              "docs": ["The vSOL reserves account for the [Invoicer]."],
-              "type": "pubkey"
-            },
-            {
-              "name": "owner",
-              "docs": [
-                "Allows changing the `fee_recipient` and `invoice_creator`."
-              ],
-              "type": "pubkey"
-            },
-            {
-              "name": "pending_owner",
-              "docs": [
-                "If ownership is being transferred, this is the new owner."
-              ],
-              "type": "pubkey"
-            },
-            {
-              "name": "payment_withdrawer",
-              "docs": [
-                "The account that can withdraw payments from the [Invoicer]."
-              ],
-              "type": "pubkey"
-            },
-            {
-              "name": "invoice_creator",
-              "docs": ["The account that can create new invoices."],
-              "type": "pubkey"
-            }
-          ]
-        }
-      }
-    ]
-  }
-  
+    }
+  ]
+}
