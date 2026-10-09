@@ -26,7 +26,7 @@ import {
   Token,
 } from "@saberhq/token-utils";
 import { depositSol, stakePoolInfo } from "@solana/spl-stake-pool";
-import { zPublicKey } from "@thevault/zod-solana";
+import { zPublicKey } from "./zodSolana";
 
 const FIRST_INVOICE_EPOCH = 780;
 
