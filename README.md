@@ -28,8 +28,25 @@ that bills you**, currently four:
 | `DzWNQFv5…` (SaaS) | VLP |
 
 The bot reads each invoicer's settlement `mint` from the invoicer account
-itself and pays with that token. Invoicers created later are picked up
-automatically by the scan.
+itself and pays with that token.
+
+### Security: only trusted invoicers are ever paid
+
+`create_invoicer` on this program is **permissionless** — anyone can deploy an
+invoicer (settlement token included, even vSOL or VLP) and issue invoices
+against any vote account for any amount. Discovery above is therefore broad,
+but payment is gated: **invoices from invoicers outside the trusted list below
+are skipped, not paid**, and a `SECURITY:` line names them.
+
+Trusted invoicers: `Fn5FbRbJ…`, `AzEQWHYL…`, `9HE9R14d…`, `DzWNQFv5…`
+(override the set with `INVOICERS`).
+
+When The Vault adds a new invoicer, add its address to `INVOICERS` — and
+verify the address through official channels first (an invoicer's `owner`
+field must have signed its creation, so the vault-owned SaaS invoicers carry
+the vault multisig there); do not paste an address out of a DM.
+`ALLOW_UNTRUSTED_INVOICERS=1` overrides the gate (logs a WARNING) for e.g.
+an invoicer rotation you already verified.
 
 ## Funding
 
@@ -64,5 +81,6 @@ machine, and useful in Actions logs when debugging “why didn't it pay”.
 | `LIST_ONLY` | unset | `1`: diagnostics only, never sends. |
 | `MAX_INVOICES_PER_RUN` | `10` | cap per day (oldest first). |
 | `LOOKBACK_EPOCHS` | `20` | ignore unpaid invoices older than this. |
-| `INVOICERS` | built-in list of the four known invoicers | comma-separated invoicer addresses, only used as the PDA fallback when the RPC cannot scan. Set it once a new invoicer bills you before this file is updated. |
+| `INVOICERS` | built-in list of the four known invoicers | comma-separated **trusted** invoicer addresses: invoices from any other invoicer are never paid, and this set is also the PDA fallback source for scan-less RPCs. Update it when The Vault adds an invoicer — see Security above. |
+| `ALLOW_UNTRUSTED_INVOICERS` | unset | `1`: pay invoices from untrusted invoicers (logs WARNING). Only after verifying a new/rotated invoicer out-of-band. |
 | `FORCE_PDA_FALLBACK` | unset | `1`: skip the program scan and use the PDA/`INVOICERS` path (to test it against your RPC). |

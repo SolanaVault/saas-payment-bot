@@ -193,10 +193,15 @@ const TOKENS: Record<string, Token> = {
 };
 
 /**
- * Known invoicers, used only as the fallback source of invoices when the RPC
- * does not support `getProgramAccounts` (the primary path, which discovers
- * every invoicer automatically — including ones created after this file was
- * written). Override with a comma-separated `INVOICERS` env list.
+ * TRUSTED invoicers. Creating an invoicer is permissionless (`create_invoicer`
+ * takes any base key + any settlement mint, incl. vSOL/VLP) and invoices can
+ * be created for any vote account bytes by whoever owns an invoicer's
+ * `invoice_creator` key — so anyone can mint you an invoice for any amount.
+ * The on-chain scan therefore discovers aggressively, but this bot only ever
+ * PAYS invoices issued by invoicers on this list (Vault-operated SaaS +
+ * community-pool invoicers, vSOL and VLP). The list doubles as the PDA
+ * fallback source of invoices for scan-less RPCs. Update `INVOICERS`
+ * (comma-separated) when The Vault introduces a new invoicer.
  */
 const KNOWN_INVOICERS = [
   "Fn5FbRbJzohohUBnwcAYHuQyAz89Q4VBHwsR5hZSGkDa", // SaaS, vSOL
@@ -211,6 +216,15 @@ const invoicerCandidates = (): PublicKey[] =>
     .map((s) => s.trim())
     .filter(Boolean)
     .map((s) => new PublicKey(s));
+
+/**
+ * Invoices from invoicers outside the trusted list are skipped entirely (and
+ * said so loudly) — they are indistinguishable from spam/invoice-harvesting
+ * attempts. Set ALLOW_UNTRUSTED_INVOICERS=1 only if The Vault rotated an
+ * invoicer and you verified its address through official channels.
+ */
+const TRUSTED_INVOICERS = new Set(invoicerCandidates().map((p) => p.toBase58()));
+const allowUntrusted = process.env.ALLOW_UNTRUSTED_INVOICERS === "1";
 
 const connection = new Connection(RPC_URL);
 
@@ -466,9 +480,36 @@ const payInvoices = async () => {
 
   // Get invoices that need to be paid
   const invoices = await getInvoices(new PublicKey(VOTE_KEY));
-  const invoicerInfos = await getInvoicerInfos(invoices);
 
-  const payable = invoices.filter((i) =>
+  // Security gate: only invoices from invoicers on the trusted list (or an
+  // explicit opt-in) are ever paid — see KNOWN_INVOICERS docs above. Anyone
+  // can create an invoicer and bill any vote account on-chain.
+  const isTrusted = (i: Invoice) => TRUSTED_INVOICERS.has(i.invoicer.toBase58());
+  const trusted = allowUntrusted ? invoices : invoices.filter(isTrusted);
+  const untrusted = invoices.filter((i) => !isTrusted(i));
+  const untrustedSkipped = [
+    ...untrusted
+      .reduce((m, i) => {
+        const k = i.invoicer.toBase58();
+        const e = m.get(k) ?? { invoicer: k, count: 0, epochs: [] as number[], amountTokens: 0 };
+        e.count += 1;
+        e.epochs.push(i.epoch);
+        e.amountTokens += Number(i.amountVsol) / 10 ** 9;
+        return m.set(k, e);
+      }, new Map<string, (typeof untrustedSkipped)[number]>())
+      .values(),
+  ];
+  if (untrusted.length) {
+    console.log(
+      `${allowUntrusted ? "WARNING: paying" : "SECURITY: refusing to pay"} invoice(s) from invoicer(s) outside the trusted list: ${untrustedSkipped
+        .map((u) => `${u.invoicer} (${u.count} invoice(s), epochs ${u.epochs.join(",")}, ${u.amountTokens} tokens)`)
+        .join("; ")}. ${allowUntrusted ? "ALLOW_UNTRUSTED_INVOICERS is set." : "CreateInvoicer is permissionless — verify with The Vault before adding it to INVOICERS."}`,
+    );
+  }
+
+  const invoicerInfos = await getInvoicerInfos(trusted);
+
+  const payable = trusted.filter((i) =>
     !!TOKENS[
       invoicerInfos
         .get(i.invoicer.toBase58())!
