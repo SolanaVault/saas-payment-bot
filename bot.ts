@@ -30,7 +30,6 @@ import {
   getOrCreateATA,
   Token,
 } from "@saberhq/token-utils";
-import { depositSol, stakePoolInfo } from "@solana/spl-stake-pool";
 import { zPublicKey } from "./zodSolana";
 
 const FIRST_INVOICE_EPOCH = 780;
@@ -61,9 +60,19 @@ if (!PRIVATE_KEY && !listOnly) {
 }
 
 /**
- * An invoice for a validator. There is one invoice per validator per epoch
- * per invoicer — a validator may hold several invoices in the same epoch
- * when several invoicers bill it (SaaS + community pool, vSOL + VLP twins).
+ * A feed invoice row for a validator (SolanaVault/stake-as-a-service-data
+ * <epoch>/invoices.json, frozen contract). There is one invoice per validator
+ * per epoch per invoicer — a validator may hold several invoices in the same
+ * epoch when several invoicers bill it (SaaS + community pool).
+ *
+ * Billing cut over from vSOL to VLP at epoch 1064; live rows are mint-aware:
+ * a NEW row ALWAYS carries `amount` (in `paymentMint` base units) plus
+ * `paymentMint` = the VLP mint (EUWoTx5vQQrxaDFdeK2PLUVbnmRWjw4x6sBbmcxBaHjF)
+ * plus `quoteRate`/`quoteSlot`. A row WITHOUT `paymentMint` is a legacy vSOL
+ * row: display-only history — never pay it, never route it, skip with a
+ * warning. A row whose `paymentMint` is present but is NOT the VLP mint is
+ * likewise a legacy row and skipped. `amount`/`paymentMint` are optional for
+ * exactly that legacy parseability and nothing more.
  */
 export const zValidatorInvoice = z.object({
   // The vote key of the validator
@@ -74,8 +83,19 @@ export const zValidatorInvoice = z.object({
   stakeLamports: z.coerce.bigint(),
   // The price per 1000 SOL in lamports that this validator is charged
   pricePer1KSol: z.coerce.bigint(),
-  // Amount to pay for the validator (denominated in the invoicer's mint)
-  amountVSol: z.coerce.bigint(),
+  // Amount to pay (payment-mint units, canonical). Legacy vSOL rows omit it.
+  amount: z.coerce.bigint().optional(),
+  // The mint `amount` is denominated in; absent => legacy vSOL row (skip).
+  paymentMint: zPublicKey.optional(),
+  paymentMintDecimals: z.coerce.number().int().min(0).max(12).optional(),
+  // SOL/quote rate used to price the invoice, and the slot it was read at
+  quoteRate: z.coerce.number().optional(),
+  quoteSlot: z.coerce.bigint().optional(),
+  // Community-pool billing (same semantics, pool-side)
+  poolStakeLamports: z.coerce.bigint().optional(),
+  poolPricePer1KSol: z.coerce.bigint().optional(),
+  // Pool fee in `paymentMint` base units (counterpart of `amount`)
+  poolAmount: z.coerce.bigint().optional(),
 });
 
 export interface Invoice {
@@ -83,7 +103,12 @@ export interface Invoice {
   invoicer: PublicKey;
   voteAccount: PublicKey;
   epoch: number;
-  amountVsol: bigint;
+  /**
+   * The on-chain `amount_vsol` field — a historical misnomer: it carries the
+   * amount in the invoicer's (VLP) payment mint. Kept as `amount` here; the
+   * IDL/program field name stays `amount_vsol`.
+   */
+  amount: bigint;
   balanceOutstanding: bigint;
 }
 
@@ -93,12 +118,14 @@ export interface Invoice {
  * The payment token of an invoice is the `mint` of the invoicer that issued
  * it — the on-chain source of truth (an invoice carries no mint; the
  * program rejects a source account of any other mint with
- * `InvalidSourceMint`). Invoicers predating the mint field were always paid
- * in vSOL, so an invoicer without the trailing mint field reads as vSOL.
+ * `InvalidSourceMint`). Billing settled in VLP at epoch 1064 and this bot
+ * pays VLP only; an invoicer predating the mint field (272 B layout, or a
+ * zeroed mint) is retired legacy vSOL machinery and fails loud.
  *
  * The 304 B layout is: [8 anchor disc][base_key 32][bump][_padding 6]
- * [vsol_reserves 32 -> @48][... authority fields ...][vsol invoicer data ...]
- * [mint 32 -> @272]. Verified against the live vSOL and VLP invoicers.
+ * [vsol_reserves 32 -> @48][... authority fields ...][mint 32 -> @272].
+ * `vsol_reserves` is the program's misnomer for the payment-mint reserves
+ * ATA. Verified against the live VLP invoicers.
  */
 export interface InvoicerInfo {
   address: PublicKey;
@@ -116,7 +143,7 @@ const invoiceParser = {
     const voteAccount = new PublicKey(data.subarray(40, 40 + 32));
     const view = new DataView(data.buffer, data.byteOffset + 72, 8 * 3);
     const epoch = Number(view.getBigUint64(0, true));
-    const amountVsol = view.getBigUint64(8, true);
+    const amount = view.getBigUint64(8, true);
     const balanceOutstanding = view.getBigUint64(16, true);
 
     return {
@@ -124,7 +151,7 @@ const invoiceParser = {
       invoicer,
       voteAccount,
       epoch,
-      amountVsol,
+      amount,
       balanceOutstanding,
     };
   },
@@ -154,9 +181,6 @@ const findInvoiceAddress = (
   return key;
 };
 
-const STAKE_POOL_ADDRESS = "Fu9BYC6tWBo1KMKaP3CFoKfRhqv9akmy3DuYwnCyWiyC";
-const STAKE_POOL_MINT = "vSoLxydx6akxyMD9XEcPvGYNGq6Nn66oqVb3UkGkei7";
-
 /**
  * The liquid unstaker is the program that mints VLP: `deposit_sol` credits
  * VLP to the payer's ATA instantly for a SOL transfer. VLP is the reward
@@ -174,16 +198,6 @@ const VLP_MINT = new PublicKey(
   "EUWoTx5vQQrxaDFdeK2PLUVbnmRWjw4x6sBbmcxBaHjF",
 );
 
-export const VSOL_TOKEN_OBJ = new Token({
-  name: "Vault SOL",
-  logoURI:
-    "https://gateway.irys.xyz/DTBps6awrJWectiBhMubYke4TBnE9kkVqyCVP4MB4irB",
-  address: STAKE_POOL_MINT.toString(),
-  decimals: 9,
-  symbol: "vSOL",
-  chainId: ChainId.MainnetBeta,
-});
-
 export const VLP_TOKEN_OBJ = new Token({
   name: "Vault Unstake LP",
   address: VLP_MINT.toBase58(),
@@ -192,25 +206,20 @@ export const VLP_TOKEN_OBJ = new Token({
   chainId: ChainId.MainnetBeta,
 });
 
-const TOKENS: Record<string, Token> = {
-  [VSOL_TOKEN_OBJ.mintAccount.toBase58()]: VSOL_TOKEN_OBJ,
-  [VLP_TOKEN_OBJ.mintAccount.toBase58()]: VLP_TOKEN_OBJ,
-};
-
 /**
  * TRUSTED invoicers. Creating an invoicer is permissionless (`create_invoicer`
- * takes any base key + any settlement mint, incl. vSOL/VLP) and invoices can
- * be created for any vote account bytes by whoever owns an invoicer's
- * `invoice_creator` key — so anyone can mint you an invoice for any amount.
- * The on-chain scan therefore discovers aggressively, but this bot only ever
- * PAYS invoices issued by invoicers on this list (Vault-operated SaaS +
- * community-pool invoicers, vSOL and VLP). The list doubles as the PDA
+ * takes any base key + any settlement mint) and invoices can be created for
+ * any vote account bytes by whoever owns an invoicer's `invoice_creator` key
+ * — so anyone can mint you an invoice for any amount. The on-chain scan
+ * therefore discovers aggressively, but this bot only ever PAYS invoices
+ * issued by invoicers on this list (Vault-operated SaaS + community-pool VLP
+ * invoicers). The vSOL-era invoicers were retired at the epoch-1064 billing
+ * cutover: their open invoices are dead legacy debt The Vault handles
+ * separately, and the bot never pays vSOL. The list doubles as the PDA
  * fallback source of invoices for scan-less RPCs. Update `INVOICERS`
  * (comma-separated) when The Vault introduces a new invoicer.
  */
 const KNOWN_INVOICERS = [
-  "Fn5FbRbJzohohUBnwcAYHuQyAz89Q4VBHwsR5hZSGkDa", // SaaS, vSOL
-  "AzEQWHYLustmnuKBduSN9pwpGvFnqBNW1rGy79Nddvqi", // community pool, vSOL
   "9HE9R14dazhR1rz6Vamap7zTzkVihqiWVk5nS447PB6F", // community pool, VLP
   "DzWNQFv5FPVwpiSehxDJJ8KMMMp89XEjVswsAmqB5ARF", // SaaS, VLP
 ];
@@ -240,11 +249,11 @@ export const makeLiquidUnstakerProgram = (provider: AnchorProvider) =>
   new Program(liquidUnstakerIDL as any, provider);
 
 /**
- * Lists all invoices of this bot's validator across every invoicer that
- * exists (SaaS/pool × vSOL/VLP), primary path a program account scan
+ * Lists all invoices of this bot's validator across every trusted invoicer
+ * (SaaS + community pool, both VLP), primary path a program account scan
  * filtered by the vote account at its known offset; fallback derives the
  * invoice PDAs for the epochs window over `INVOICERS`.
- * Returns them oldest-first so no invoice ages out of reach unpaid.
+ * Returns them oldest-first so no invoice ages out unpaid.
  */
 export const getInvoices = async (voteAccount: PublicKey): Promise<Invoice[]> => {
   const epochInfo = await connection.getEpochInfo();
@@ -291,17 +300,20 @@ export const getInvoices = async (voteAccount: PublicKey): Promise<Invoice[]> =>
 
   return invoices
     .filter(inWindow)
-    .filter((i) => i.balanceOutstanding > 0 && i.amountVsol > 0)
+    .filter((i) => i.balanceOutstanding > 0 && i.amount > 0)
     .sort((a, b) => a.epoch - b.epoch);
 };
 
 /**
  * Decides the payment mint + reserves account of an invoicer from its raw
- * account bytes: 304 B accounts carry their mint at @272, their reserves ATA
- * at @42+6 (anchor's explicit `_padding [u8; 6]` after the PDA bump aligns
- * `vsol_reserves` to @48). A 272 B invoicer predates all of that and is paid
- * in vSOL. Anything else is program drift — stop loudly rather than pay into
- * the wrong token.
+ * account bytes: only the 304 B mint-aware layout — its mint at @272, its
+ * reserves ATA at @42+6 (anchor's explicit `_padding [u8; 6]` after the PDA
+ * bump aligns `vsol_reserves` to @48). A 272 B account predates the mint
+ * field, and a 304 B account with a zeroed @272 mint predates mint-aware
+ * settlement: both are the retired vSOL era's layout. The bot is pointed
+ * only at mint-aware VLP invoicers, so either one is an unexpected legacy
+ * vSOL invoicer — stop loudly rather than pay in vSOL. Anything else is
+ * program drift.
  */
 const RESERVES_OFFSET = 48;
 const MINT_OFFSET = 272;
@@ -310,20 +322,20 @@ const resolveInvoicer = async (address: PublicKey): Promise<InvoicerInfo> => {
   const info = await connection.getAccountInfo(address);
   if (!info) throw Error(`Invoicer ${address.toBase58()} not found`);
   const data = info.data;
-  let mint: PublicKey;
-  if (data.length === 304) {
-    const mintBytes = data.subarray(MINT_OFFSET, MINT_OFFSET + 32);
-    mint = mintBytes.equals(new Uint8Array(32).fill(0))
-      ? new PublicKey(STAKE_POOL_MINT)
-      : new PublicKey(mintBytes);
-  } else if (data.length === 272) {
-    mint = new PublicKey(STAKE_POOL_MINT);
-  } else {
+  if (data.length !== 304) {
     throw Error(
       `Unexpected Invoicer account size ${data.length} for ${address.toBase58()} — ` +
-        `this bot understands only the 272 B (pre-mint) and 304 B (mint-aware) layouts. Update saas-payment-bot.`,
+        `this bot understands only the 304 B (mint-aware) layout; a ${data.length} B pre-mint account is an unexpected legacy vSOL invoicer, and vSOL payments were removed (billing cut over to VLP at epoch 1064).`,
     );
   }
+  const mintBytes = data.subarray(MINT_OFFSET, MINT_OFFSET + 32);
+  if (mintBytes.every((b) => b === 0)) {
+    throw Error(
+      `unexpected legacy vSOL invoicer ${address.toBase58()} (zeroed mint at @${MINT_OFFSET}) — ` +
+        `the vSOL invoicers were retired at the epoch-1064 billing cutover; this bot pays VLP only.`,
+    );
+  }
+  const mint = new PublicKey(mintBytes);
   const reserves = new PublicKey(data.subarray(RESERVES_OFFSET, RESERVES_OFFSET + 32));
 
   // Self-check the offsets against the reserves ATA itself: it must be a
@@ -376,33 +388,6 @@ export const getTokenBalance = async (
       acc + Number(a.account.data.readBigUInt64LE(64)) / 10 ** 9,
     0,
   );
-};
-
-export const swapSOLForVSOL = async (
-  provider: Provider,
-  userPublicKey: PublicKey,
-  amount: number,
-) => {
-  const destinationPoolAccount = await getOrCreateATA({
-    provider,
-    mint: new PublicKey(STAKE_POOL_MINT),
-    owner: userPublicKey,
-  });
-
-  const tx = await depositSol(
-    connection,
-    new PublicKey(STAKE_POOL_ADDRESS),
-    userPublicKey,
-    amount,
-    destinationPoolAccount.address,
-  );
-
-  const instructions: TransactionInstruction[] = [
-    destinationPoolAccount.instruction,
-    ...tx.instructions,
-  ].filter((i): i is TransactionInstruction => !!i);
-
-  return { instructions, signers: tx.signers };
 };
 
 /**
@@ -461,16 +446,6 @@ export const buildDepositSolInstructions = async (
   };
 };
 
-export const getVSOLPrice = async () => {
-  const stakePool = await stakePoolInfo(
-    connection,
-    new PublicKey(STAKE_POOL_ADDRESS),
-  );
-  return new BigNumber(stakePool?.totalLamports ?? 0)
-    .div(new BigNumber(stakePool?.poolTokenSupply ?? 0))
-    .toNumber();
-};
-
 /**
  * Price of one VLP in SOL, from the unstake pool account:
  * (SOL in the vault + deactivating stake lamports) / circulating VLP.
@@ -518,7 +493,7 @@ const payInvoices = async () => {
         const e = m.get(k) ?? { invoicer: k, count: 0, epochs: [] as number[], amountTokens: 0 };
         e.count += 1;
         e.epochs.push(i.epoch);
-        e.amountTokens += Number(i.amountVsol) / 10 ** 9;
+        e.amountTokens += Number(i.amount) / 10 ** 9;
         return m.set(k, e);
       }, new Map<string, (typeof untrustedSkipped)[number]>())
       .values(),
@@ -533,20 +508,20 @@ const payInvoices = async () => {
 
   const invoicerInfos = await getInvoicerInfos(trusted);
 
-  const payable = trusted.filter((i) =>
-    !!TOKENS[
-      invoicerInfos
-        .get(i.invoicer.toBase58())!
-        .mint.toBase58()
-    ],
-  );
-  for (const invoice of invoices) {
-    if (!payable.includes(invoice)) {
-      console.log(
-        `Skipping epoch ${invoice.epoch} of ${invoice.invoicer.toBase58()}: its invoicer settles in ${invoicerInfos.get(invoice.invoicer.toBase58())!.mint.toBase58()}, a token this bot cannot fund.`,
+  // The trusted list holds only mint-aware VLP invoicers, so every trusted
+  // invoice must settle in the VLP mint. If one somehow resolves to a
+  // non-VLP mint, throw loudly — the invoicer-list filter makes this
+  // unreachable, and paying any other token is not an option (the vSOL
+  // payment path is gone).
+  for (const invoice of trusted) {
+    const mint = invoicerInfos.get(invoice.invoicer.toBase58())!.mint;
+    if (!mint.equals(VLP_TOKEN_OBJ.mintAccount)) {
+      throw Error(
+        `Invoice ${invoice.address.toBase58()} (epoch ${invoice.epoch}) of invoicer ${invoice.invoicer.toBase58()} settles in ${mint.toBase58()}, not the VLP mint ${VLP_TOKEN_OBJ.mintAccount.toBase58()} — the vSOL payment path has been removed; refusing to pay.`,
       );
     }
   }
+  const payable = trusted;
 
   const maxPerRun = Number(MAX_INVOICES_PER_RUN ?? 10);
   const due = payable.slice(0, maxPerRun);
@@ -559,7 +534,7 @@ const payInvoices = async () => {
   for (const invoice of due) {
     const mint = invoicerInfos.get(invoice.invoicer.toBase58())!.mint;
     const entry = dueByMint.get(mint.toBase58()) ?? { mint, amount: 0n };
-    entry.amount += invoice.amountVsol;
+    entry.amount += invoice.amount;
     dueByMint.set(mint.toBase58(), entry);
   }
 
@@ -572,39 +547,26 @@ const payInvoices = async () => {
   };
   await readBalances();
 
-  let vSOLPrice: number | null = null;
   let vlpPriceSol: number | null = null;
-  try {
-    vSOLPrice = await getVSOLPrice();
-  } catch (e: any) {
-    console.log(`vSOL price unavailable: ${e.message}`);
-  }
   try {
     vlpPriceSol = await getVLPPriceSol();
   } catch (e: any) {
     console.log(`VLP price unavailable: ${e.message}`);
   }
 
-  // Plan view: what is due per token, what the wallet holds, and roughly how
+  // Plan view: what is due in VLP, what the wallet holds, and roughly how
   // much SOL a top-up needs (VLP: floor price + 30% margin). Listing only —
   // funding instructions are built during a real run so LIST never signs.
   const plan = [...dueByMint.values()].map(({ mint, amount }) => {
     const dueTokens = Number(amount) / 10 ** 9;
     const balance = balances.get(mint.toBase58()) ?? 0;
     const deficit = Math.max(0, dueTokens - balance);
-    const price = mint.equals(VSOL_TOKEN_OBJ.mintAccount)
-      ? vSOLPrice
-      : mint.equals(VLP_TOKEN_OBJ.mintAccount)
-        ? vlpPriceSol
-        : null;
     return {
       mint: mint.toBase58(),
       due: dueTokens,
       balance,
       fundSol:
-        price && deficit > 0
-          ? deficit * price * (mint.equals(VLP_TOKEN_OBJ.mintAccount) ? 1.3 : 1)
-          : 0,
+        vlpPriceSol && deficit > 0 ? deficit * vlpPriceSol * 1.3 : 0,
     };
   });
 
@@ -618,7 +580,7 @@ const payInvoices = async () => {
           mint: invoicerInfos.get(i.invoicer.toBase58())!.mint.toBase58(),
           epoch: i.epoch,
           amountTokens:
-            Number(i.amountVsol) / 10 ** 9,
+            Number(i.amount) / 10 ** 9,
           balanceOutstandingTokens:
             Number(i.balanceOutstanding) / 10 ** 9,
         })),
@@ -660,8 +622,7 @@ const payInvoices = async () => {
     // Top up payment tokens that are short, as one funding transaction, then
     // re-read balances AT 'confirmed' once the tx is confirmed (never make the
     // pay decision off a pre-funding read). A token we cannot fund (price
-    // oracle down, deposit caps, no SOL) only costs that token its invoices
-    // this run — the other token's invoices still get paid from its balance.
+    // oracle down, deposit caps, no SOL) only costs its invoices this run.
     const fundingIxs: TransactionInstruction[] = [];
     const fundingSigners: Signer[] = [];
     for (const { mint, amount } of dueByMint.values()) {
@@ -670,14 +631,7 @@ const payInvoices = async () => {
       if (balance >= dueTokens) continue;
       const deficit = dueTokens - balance;
       try {
-        if (mint.equals(VSOL_TOKEN_OBJ.mintAccount)) {
-          if (!vSOLPrice) throw new Error("vSOL price unavailable");
-          const lamports = Math.ceil(deficit * vSOLPrice * 10 ** 9);
-          const ixs = await swapSOLForVSOL(provider, payer.publicKey, lamports);
-          fundingIxs.push(...ixs.instructions);
-          fundingSigners.push(...ixs.signers);
-          fundingSol.set(mint.toBase58(), lamports / LAMPORTS_PER_SOL);
-        } else if (mint.equals(VLP_TOKEN_OBJ.mintAccount)) {
+        if (mint.equals(VLP_TOKEN_OBJ.mintAccount)) {
           if (!vlpPriceSol)
             throw new Error("VLP price unavailable (unstake pool LP supply is zero?)");
           const lamports = Math.ceil(deficit * vlpPriceSol * 1.3 * 10 ** 9);
@@ -691,6 +645,12 @@ const payInvoices = async () => {
           );
           fundingIxs.push(...ixs.instructions);
           fundingSol.set(mint.toBase58(), lamports / LAMPORTS_PER_SOL);
+        } else {
+          // Unreachable: the mint check above in payInvoices already threw
+          // for anything but VLP. Loud, never silent.
+          throw Error(
+            `Cannot fund ${mint.toBase58()}: the only fundable payment mint is VLP (${VLP_TOKEN_OBJ.mintAccount.toBase58()}).`,
+          );
         }
       } catch (e: any) {
         console.log(`Cannot fund ${mint.toBase58()} this run: ${e.message}`);
@@ -857,12 +817,15 @@ export const buildPayChunks = async (
       invoices.slice(i, i + 8).map(async (invoice) => {
         const info = invoicerInfos.get(invoice.invoicer.toBase58())!;
         return program.methods
-          .payInvoice(new BN(invoice.amountVsol.toString()))
+          // The IDL arg is still named `amount_vsol` — a misnomer; it carries
+          // the amount in the invoicer's payment mint (VLP).
+          .payInvoice(new BN(invoice.amount.toString()))
           .accountsPartial({
             // The parsed invoice carries the invoicer that issued it, so a
             // pool invoice pays into the pool's invoicer and a SaaS invoice
-            // into the production one, with no branch here — vSOL invoices
-            // pay from the vSOL ATA, VLP invoices from the VLP ATA.
+            // into the production one, with no branch here — every invoice
+            // settles from the payer's VLP ATA. `vsolReserves` is the IDL's
+            // misnomer for the invoicer's payment-mint reserves ATA.
             invoicer: invoice.invoicer,
             invoice: invoice.address,
             source: getATAAddressSync({

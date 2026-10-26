@@ -1,7 +1,7 @@
 # SaaS payment bot
 
 A minimal bot for validators: pays your invoices from The Vault's SaaS +
-community-pool invoicers (vSOL and VLP) using a daily GitHub Actions cron.
+community-pool invoicers (VLP) using a daily GitHub Actions cron.
 The bot only needs a funded wallet and your vote account key.
 
 ## Setup
@@ -11,19 +11,18 @@ The bot only needs a funded wallet and your vote account key.
      If yours does not, also set `INVOICERS` (see below).
    - `VOTE_KEY`: your validator vote account.
    - `PRIVATE_KEY`: JSON byte array (e.g. output of `cat my-key.json`) of a
-     wallet funded with SOL. It holds vSOL/VLP automatically.
+     wallet funded with SOL. It holds VLP automatically.
 2. Enable Actions on the fork (the workflow runs daily at 00:00 UTC).
 
 ## What it pays
 
 Invoices are discovered on-chain by scanning the `epoch-invoicer` program for
 invoice accounts owned by your vote account — this covers **every invoicer
-that bills you**, currently four:
+that bills you**, currently the two VLP ones (billing cut over from vSOL to
+VLP at epoch 1064; the retired vSOL invoicers are never paid):
 
 | invoicer | settlement token |
 | --- | --- |
-| `Fn5FbRbJ…` (SaaS) | vSOL |
-| `AzEQWHYL…` (community pool) | vSOL |
 | `9HE9R14d…` (community pool) | VLP |
 | `DzWNQFv5…` (SaaS) | VLP |
 
@@ -33,12 +32,12 @@ itself and pays with that token.
 ### Security: only trusted invoicers are ever paid
 
 `create_invoicer` on this program is **permissionless** — anyone can deploy an
-invoicer (settlement token included, even vSOL or VLP) and issue invoices
+invoicer (settlement token included) and issue invoices
 against any vote account for any amount. Discovery above is therefore broad,
 but payment is gated: **invoices from invoicers outside the trusted list below
 are skipped, not paid**, and a `SECURITY:` line names them.
 
-Trusted invoicers: `Fn5FbRbJ…`, `AzEQWHYL…`, `9HE9R14d…`, `DzWNQFv5…`
+Trusted invoicers: `9HE9R14d…`, `DzWNQFv5…`
 (override the set with `INVOICERS`).
 
 When The Vault adds a new invoicer, add its address to `INVOICERS` — and
@@ -50,16 +49,17 @@ an invoicer rotation you already verified.
 
 ## Funding
 
-If your wallet lacks the token an invoice settles in, the bot buys it with
+If your wallet lacks the VLP an invoice settles in, the bot buys it with
 SOL inside the run:
 
-- vSOL: deposited into the Vault stake pool (`@solana/spl-stake-pool`).
 - VLP: minted by The Vault's liquid unstaker (`deposit_sol`), the same route
   the dapp's “Pay” button uses. Estimated from the pool's SOL/VLP rate with a
   30% margin — the surplus just stays in your VLP balance for later runs.
 
-A token whose top-up fails (price oracle down, pool deposit caps, no SOL) is
-skipped for that run; invoices already covered by your balances still get
+The bot pays VLP only; the vSOL funding/deposit machinery (Marinade stake
+pool) was removed after the epoch-1064 billing cutover. A top-up failure
+(price oracle down, pool deposit caps, no SOL) skips funding for that run;
+invoices already covered by your balances still get
 paid. Funding transactions are confirmed (polled to `confirmed`/`finalized`)
 **before** balances are re-read and before anything is paid — balances are
 read at `confirmed`, never off a pre-funding read. A funding tx that stays
@@ -88,7 +88,7 @@ machine, and useful in Actions logs when debugging “why didn't it pay”.
 | `LIST_ONLY` | unset | `1`: diagnostics only, never sends. |
 | `MAX_INVOICES_PER_RUN` | `10` | cap per day (oldest first). |
 | `LOOKBACK_EPOCHS` | `20` | ignore unpaid invoices older than this. |
-| `INVOICERS` | built-in list of the four known invoicers | comma-separated **trusted** invoicer addresses: invoices from any other invoicer are never paid, and this set is also the PDA fallback source for scan-less RPCs. Update it when The Vault adds an invoicer — see Security above. |
+| `INVOICERS` | built-in list of the two known VLP invoicers | comma-separated **trusted** invoicer addresses: invoices from any other invoicer are never paid, and this set is also the PDA fallback source for scan-less RPCs. Update it when The Vault adds an invoicer — see Security above. |
 | `ALLOW_UNTRUSTED_INVOICERS` | unset | `1`: pay invoices from untrusted invoicers (logs WARNING). Only after verifying a new/rotated invoicer out-of-band. |
 | `CONFIRM_TIMEOUT_MS` | `90000` | wall-clock bound per broadcast for the confirm poll; on expiry the tx is rebuilt/re-sent (max 2) or deferred. |
 | `VERBOSE` | unset | `1`: also print the raw base64 of every built transaction (default output is quiet: `sent <sig>` + outcome only). |
@@ -96,7 +96,8 @@ machine, and useful in Actions logs when debugging “why didn't it pay”.
 
 ## Testing against a mainnet fork (Surfpool)
 
-`./surfpool-e2e.sh` proves the whole flow — invoice discovery, SOL→vSOL and SOL→VLP (liquid unstaker) funding, payment, idempotency —
+`./surfpool-e2e.sh` proves the whole flow — invoice discovery, SOL→VLP
+(liquid unstaker) funding, payment, idempotency —
 against a **local mainnet fork** served by [Surfpool](https://github.com/surfpool/surfpool)
 (tested with surfpool 1.5.0). It never talks to real mainnet with your wallet:
 every transaction goes to the fork; accounts are materialized on demand from
@@ -130,14 +131,14 @@ loudly if the vote has no unpaid invoices on the fork (i.e. real state changed)
 — that's a stale expectation, not a bot bug.
 
 **Why no delegation setup is needed:** the bot pays with `pay_invoice`, whose
-`source_authority` is the owner of your own vSOL/VLP token accounts — the bot
+`source_authority` is the owner of your own VLP token accounts — the bot
 signs and pays from the wallet in `PRIVATE_KEY` directly. (`pay_invoice` also
 accepts a delegate authority — that's the validator-side auto-debit crank —
 but the bot never needs it.) A fresh throwaway wallet is therefore enough to
 reach the full-success path on the fork.
 
 What the fork proves vs. the real run: on-chain mechanics (layouts, PDAs,
-both fundings, payment, idempotency, degradation paths) are fully exercised
+the funding, payment, idempotency, degradation paths) are fully exercised
 against real mainnet state. What only the real validator run proves: the fork
 copies mainnet balances/rates at materialization time but slot/sysvar drift is
 simulated — final confirmation, priority-fee behavior under congestion, and

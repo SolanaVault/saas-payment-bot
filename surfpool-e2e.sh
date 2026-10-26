@@ -12,8 +12,8 @@
 #   B  the validator's real unpaid invoices are visible & unpaid (incl. VLP)
 #   E1 LIST_ONLY=1 sends nothing (fork transaction count unchanged)
 #   E2 unfunded wallet degrades cleanly: no send, no zero-sig retry loop
-#   C  full bot run: the funding the due tokens require (SOL->vSOL Marinade
-#      and/or SOL->VLP liquid-staker deposit_sol) lands CONFIRMED on the fork
+#   C  full bot run: the funding the due tokens require (SOL->VLP liquid
+#      staker deposit_sol) lands CONFIRMED on the fork
 #      (top-up tx is polled to confirmed, balances re-read at 'confirmed',
 #      only then the pay decision) and every due invoice gets paid. The bot
 #      pays with owner-signed pay_invoice from its own ATAs — no delegation
@@ -170,7 +170,7 @@ LAM=$(HX dump "$UNFUNDED_PUBKEY" | grep 'BALANCE SOL' | awk '{print $3}')
 echo "PASS E2: funding skipped, nothing sent, no retry loop"
 
 # ---------- C: full run -------------------------------------------------------------
-STEP "C: full bot run (fund the due tokens via Marinade/liquid-unstaker, then pay_invoice)"
+STEP "C: full bot run (fund the due tokens via the liquid unstaker, then pay_invoice)"
 PRIVATE_KEY=$(cat "$PAYER") npx tsx bot.ts >"$RUN_LOG" 2>&1 && C_EXIT=0 || C_EXIT=$?
 grep -E 'Funding|Paying chunk|^Paid |Cannot fund|skipping top-ups|Still short|SECURITY|Retrying|TX failed' "$RUN_LOG" || true
 [ $C_EXIT -eq 0 ] || { EXPORT_CODE=5; fail "C: bot exited $C_EXIT — see $RUN_LOG"; }

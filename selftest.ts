@@ -5,13 +5,13 @@
  *
  * LIST-only-style: env-less (public RPC + a funded System-owned mainnet
  * account as fee-payer/user identity where a PublicKey is needed — a fresh
- * dummy keypair has no lamports and no mainnet faucet, which trips
- * spl-stake-pool's client-side balance check and every sim; it is kept as
- * fallback), scans the real unpaid invoices of the vote account via the PDA
+ * dummy keypair has no lamports and no mainnet faucet, which trips every
+ * sim at the fee level; it is kept as fallback), scans the real unpaid
+ * invoices of the vote account via the PDA
  * fallback across the trusted invoicers, and:
  *
- *  1. assembles the FULL funding instruction sets of both payment paths —
- *     vSOL (Marinade depositSol) and VLP (liquid unstaker depositSol) —
+ *  1. assembles the FULL funding instruction set of the VLP payment path —
+ *     SOL -> VLP via the liquid unstaker depositSol —
  *     plus the payInvoice instructions, asserting nothing throws client-side
  *     (bug A: anchor 0.31 'Wrong input type for account "systemProgram"'
  *     when account metas were passed as {pubkey,isSigner,isWritable} objects);
@@ -35,10 +35,8 @@ import { SolanaProvider, SignerWallet } from "@saberhq/solana-contrib";
 process.env.RPC_URL ??= "https://api.mainnet-beta.solana.com";
 process.env.VOTE_KEY ??= "B1w6SZcyvjyp6zEyStcc8u9AxXAh2AbYvNzMmP9rRKE9";
 process.env.INVOICERS ??= [
-  "Fn5FbRbJzohohUBnwcAYHuQyAz89Q4VBHwsR5hZSGkDa",
-  "AzEQWHYLustmnuKBduSN9pwpGvFnqBNW1rGy79Nddvqi",
-  "9HE9R14dazhR1rz6Vamap7zTzkVihqiWVk5nS447PB6F",
-  "DzWNQFv5FPVwpiSehxDJJ8KMMMp89XEjVswsAmqB5ARF",
+  "9HE9R14dazhR1rz6Vamap7zTzkVihqiWVk5nS447PB6F", // community pool, VLP
+  "DzWNQFv5FPVwpiSehxDJJ8KMMMp89XEjVswsAmqB5ARF", // SaaS, VLP
 ].join(",");
 process.env.LIST_ONLY = "1";
 // Spec: scan via PDA fallback (works on RPCs without getProgramAccounts).
@@ -85,10 +83,8 @@ const main = async () => {
 
   const infos: Map<string, any> = await bot.getInvoicerInfos(invoices);
   const mintOf = (i: any) => infos.get(i.invoicer.toBase58())!.mint as PublicKey;
-  const payable = invoices.filter(
-    (i) =>
-      mintOf(i).equals(bot.VSOL_TOKEN_OBJ.mintAccount) ||
-      mintOf(i).equals(bot.VLP_TOKEN_OBJ.mintAccount),
+  const payable = invoices.filter((i) =>
+    mintOf(i).equals(bot.VLP_TOKEN_OBJ.mintAccount),
   );
 
   const dueByMint = new Map<string, PublicKey>();
@@ -97,9 +93,8 @@ const main = async () => {
 
   // ---- 2. env-less provider: fee-payer identity where a PublicKey is needed ----
   // A freshly generated dummy keypair has 0 lamports and mainnet has no
-  // faucet; spl-stake-pool's depositSol checks the payer's balance client-side,
-  // and simulateTransaction would stop at the missing funds before executing
-  // anything. So the identity is ANY funded System-owned account (it never
+  // faucet; simulateTransaction would stop at the missing fee funds before
+  // executing anything. So the identity is ANY funded System-owned account (it never
   // signs: builds are local, sims run with sigVerify=false). Only if that
   // probe fails do we fall back to a dummy keypair (shape checks still run;
   // sims just degrade to funding-level errors).
@@ -128,56 +123,52 @@ const main = async () => {
     { commitment: "confirmed" },
   );
 
-  const vSOLPrice = await bot.getVSOLPrice();
   const vlpPriceSol = await bot.getVLPPriceSol();
-  console.log(`prices: vSOL=${vSOLPrice} SOL/vSOL, VLP=${vlpPriceSol} SOL/VLP`);
+  console.log(`prices: VLP=${vlpPriceSol} SOL/VLP`);
 
   // ---- 3. fund+pay instruction sets per mint, must assemble ------------
   const compositions: { label: string; instructions: any[] }[] = [];
   for (const mint of dueByMint.values()) {
     const mintInvoices = payable.filter((i) => mintOf(i).equals(mint));
     const dueTokens =
-      Number(mintInvoices.reduce((a: bigint, i: any) => a + i.amountVsol, 0n)) /
+      Number(mintInvoices.reduce((a: bigint, i: any) => a + i.amount, 0n)) /
       10 ** 9;
     const balance = await bot.getTokenBalance(identity, mint);
     const deficit = dueTokens - balance;
-    let fund: { instructions: any[] };
-    if (mint.equals(bot.VSOL_TOKEN_OBJ.mintAccount)) {
-      const lamports = Math.ceil(deficit * vSOLPrice * 10 ** 9);
-      const ixs = await bot.swapSOLForVSOL(provider, identity, lamports);
-      fund = { instructions: ixs.instructions };
-      step(true, `vSOL top-up (${lamports} lamports) built: ${ixs.instructions.length} ix`);
-    } else {
-      const lamports = Math.ceil(deficit * vlpPriceSol! * 1.3 * 10 ** 9);
-      const ixs = await bot.buildDepositSolInstructions(
-        bot.makeLiquidUnstakerProgram(readOnlyProvider),
-        provider,
-        identity,
-        new BN(lamports),
+    // Same hard rule as the bot: VLP only — a non-VLP mint is a regression,
+    // fail loud rather than build a retired payment path.
+    if (!mint.equals(bot.VLP_TOKEN_OBJ.mintAccount))
+      throw Error(
+        `unexpected non-VLP settlement mint ${mint.toBase58()} — the bot pays VLP only`,
       );
-      const depositIx = ixs.instructions.find(
-        (ix) => ix.programId.toBase58() === "2rU1oCHtQ7WJUvy15tKtFvxdYNNSc3id7AzUcjeFSddo",
-      );
-      // IDL order: pool, sol_vault, lp_mint, user, user_lp_account,
-      // inventory_summary, clock, system_program, token_program.
-      const names = [
-        "pool", "sol_vault", "lp_mint", "user", "user_lp_account",
-        "inventory_summary", "clock", "system_program", "token_program",
-      ];
-      const last = depositIx.keys.length - 1;
-      step(
-        depositIx.keys.length === 9 &&
-          depositIx.keys[7].pubkey.equals(SystemProgram.programId) &&
-          depositIx.keys[last].pubkey.equals(TOKEN_PROGRAM_ID) &&
-          !depositIx.keys[7].isSigner && !depositIx.keys[7].isWritable &&
-          !depositIx.keys[last].isSigner && !depositIx.keys[last].isWritable,
-        `liquid-unstaker depositSol built with ${depositIx.keys.length} accounts:\n    ` +
-          depositIx.keys
-            .map((k: any, j: number) => `${names[j]}=${k.pubkey.toBase58()}${k.isSigner ? " S" : ""}${k.isWritable ? " W" : ""}`)
-            .join("\n    "),
-      );
-      fund = ixs;
-    }
+    const lamports = Math.ceil(deficit * vlpPriceSol! * 1.3 * 10 ** 9);
+    const fund = await bot.buildDepositSolInstructions(
+      bot.makeLiquidUnstakerProgram(readOnlyProvider),
+      provider,
+      identity,
+      new BN(lamports),
+    );
+    const depositIx = fund.instructions.find(
+      (ix) => ix.programId.toBase58() === "2rU1oCHtQ7WJUvy15tKtFvxdYNNSc3id7AzUcjeFSddo",
+    );
+    // IDL order: pool, sol_vault, lp_mint, user, user_lp_account,
+    // inventory_summary, clock, system_program, token_program.
+    const names = [
+      "pool", "sol_vault", "lp_mint", "user", "user_lp_account",
+      "inventory_summary", "clock", "system_program", "token_program",
+    ];
+    const last = depositIx.keys.length - 1;
+    step(
+      depositIx.keys.length === 9 &&
+        depositIx.keys[7].pubkey.equals(SystemProgram.programId) &&
+        depositIx.keys[last].pubkey.equals(TOKEN_PROGRAM_ID) &&
+        !depositIx.keys[7].isSigner && !depositIx.keys[7].isWritable &&
+        !depositIx.keys[last].isSigner && !depositIx.keys[last].isWritable,
+      `liquid-unstaker depositSol built with ${depositIx.keys.length} accounts:\n    ` +
+        depositIx.keys
+          .map((k: any, j: number) => `${names[j]}=${k.pubkey.toBase58()}${k.isSigner ? " S" : ""}${k.isWritable ? " W" : ""}`)
+          .join("\n    "),
+    );
     const payChunks = await bot.buildPayChunks(
       bot.makeInvoicerProgramReadOnly(),
       mintInvoices,
